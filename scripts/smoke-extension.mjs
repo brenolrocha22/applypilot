@@ -255,6 +255,8 @@ try {
   const extracted = await waitFor(() => bodyHas(app, 'Revise o que foi extraído'), 20000);
   await app.screenshot('import');
   check('PDF importado e texto extraído', !!extracted && (await bodyHas(app, 'Power BI')), app.errors.join(' | '));
+  // Arquivo do currículo guardado para anexar (fictício).
+  await app.evaluate(`chrome.storage.local.set({ 'applypilot.resumeFile': { name: 'Curriculo Ana.pdf', type: 'application/pdf', size: 3, base64: 'AQID', savedAt: new Date().toISOString() } })`);
   app.close();
 
   // 6. Formulário de demonstração
@@ -272,10 +274,12 @@ try {
     portfolio: document.querySelector('[name=portfolio]').value,
     cpf: document.querySelector('[name=cpf]').value,
     password: document.querySelector('[name=password]').value,
+    file: document.querySelector('input[type=file]')?.files?.[0]?.name ?? null,
   })`);
   check('Campos preenchidos (nome, e-mail, inglês)', values.first === 'Ana' && values.email === 'ana.exemplo@example.com' && values.english === '2', JSON.stringify(values));
   check('Valor existente não foi substituído (portfólio)', values.portfolio === 'https://meu-site-antigo.example.com');
   check('CPF e senha não foram preenchidos', values.cpf === '' && values.password === '');
+  check('Arquivo do currículo anexado ao campo de arquivo', values.file === 'Curriculo Ana.pdf', JSON.stringify(values.file));
   const logs = await demo.evaluate(`chrome.storage.local.get('applypilot.fillLogs').then(r => r['applypilot.fillLogs'])`);
   check('Operação registrada sem valores pessoais', logs?.length === 1 && !JSON.stringify(logs).includes('ana.exemplo@example.com'));
   check('Sem erros no formulário de demonstração', demo.errors.length === 0, demo.errors.join(' | '));

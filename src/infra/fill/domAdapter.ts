@@ -1,4 +1,4 @@
-import type { FieldDescriptor, FillLog, FillLogEntry, FillPlanItem } from '../../core/fill/types';
+import type { AttachableFile, FieldDescriptor, FillLog, FillLogEntry, FillPlanItem } from '../../core/fill/types';
 
 /**
  * Ponte entre o DOM e o motor de preenchimento.
@@ -58,10 +58,12 @@ export function collectFields(root: ParentNode, doc: Document = document): Colle
       placeholder: el.getAttribute('placeholder') ?? '',
       autocomplete: el.getAttribute('autocomplete') ?? '',
       ariaLabel: el.getAttribute('aria-label') ?? '',
-      currentValue: tag === 'select' ? ((el as HTMLSelectElement).selectedIndex > 0 ? el.value : '') : el.value,
+      // O valor de campos de senha nunca é lido.
+      currentValue: type === 'password' ? '' : tag === 'select' ? ((el as HTMLSelectElement).selectedIndex > 0 ? el.value : '') : el.value,
       options: tag === 'select' ? Array.from((el as HTMLSelectElement).options).map((o) => ({ value: o.value, label: o.textContent?.trim() ?? '' })) : [],
       required: el.required,
       disabled: el.disabled || (el as HTMLInputElement).readOnly === true,
+      accept: type === 'file' ? (el.getAttribute('accept') ?? '') : undefined,
     });
   });
   return { descriptors, elements };
@@ -77,11 +79,30 @@ function setNativeValue(el: FormElement, value: string): void {
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+/** Anexa um arquivo guardado a um <input type="file"> (o mesmo que o usuário escolher o arquivo). */
+function attachFile(el: FormElement, file: AttachableFile): boolean {
+  if (!(el instanceof HTMLInputElement) || el.type !== 'file') return false;
+  const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
+  const dt = new DataTransfer();
+  dt.items.add(new File([bytes], file.name, { type: file.type, lastModified: Date.parse(file.savedAt) || Date.now() }));
+  el.files = dt.files;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return el.files?.[0]?.name === file.name;
+}
+
 /**
  * Aplica somente os itens aprovados pelo usuário e devolve o registro da operação.
  * Itens "skip_has_value" só são aplicados se aprovados explicitamente (substituição consciente).
  */
-export function applyFillPlan(plan: FillPlanItem[], approvedKeys: Set<string>, elements: Map<string, FormElement>, page: string, id: string): FillLog {
+export function applyFillPlan(
+  plan: FillPlanItem[],
+  approvedKeys: Set<string>,
+  elements: Map<string, FormElement>,
+  page: string,
+  id: string,
+  files: { resumeFile?: AttachableFile | null } = {},
+): FillLog {
   const entries: FillLogEntry[] = [];
   for (const item of plan) {
     const base = { fieldKey: item.field.key, fieldLabel: item.field.label || item.field.name || item.field.id, profileField: item.profileField, action: item.action };
@@ -93,6 +114,12 @@ export function applyFillPlan(plan: FillPlanItem[], approvedKeys: Set<string>, e
     const el = elements.get(item.field.key);
     if (!el || !el.isConnected) {
       entries.push({ ...base, result: 'failed', message: 'Campo não encontrado na página.' });
+      continue;
+    }
+    if (item.profileField === 'resumeFile') {
+      const ok = !!files.resumeFile && attachFile(el, files.resumeFile);
+      if (ok) el.setAttribute('data-applypilot-filled', 'true');
+      entries.push(ok ? { ...base, result: 'filled' } : { ...base, result: 'failed', message: files.resumeFile ? 'A página não aceitou o arquivo.' : 'Arquivo do currículo indisponível.' });
       continue;
     }
     setNativeValue(el, item.value!);

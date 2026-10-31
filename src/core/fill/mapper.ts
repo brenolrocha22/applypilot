@@ -4,7 +4,7 @@ import { LANGUAGE_LEVEL_LABELS } from '../knowledge/languages';
 import { normalizeText } from '../knowledge/normalize';
 import { resolveLanguageId } from '../knowledge/languages';
 import { totalYears } from '../profile/dates';
-import type { FieldDescriptor, FillAction, FillPlanItem, MatchCandidate, ProfileFieldKey } from './types';
+import type { FieldDescriptor, FillAction, FillContext, FillPlanItem, MatchCandidate, ProfileFieldKey } from './types';
 
 /**
  * Mapeamento de campos de formulário → propriedades do perfil.
@@ -51,13 +51,15 @@ export const FIELD_CATALOG: CatalogEntry[] = [
   { key: 'desiredSalary', label: 'Pretensão salarial', autocomplete: [], pattern: /(pretensao salarial|expectativa salarial|salario|salary|remuneracao)/, sensitive: true },
   { key: 'workMode', label: 'Modalidade de trabalho', autocomplete: [], pattern: /(modalidade|modelo de trabalho|work (mode|model|arrangement))/ },
   { key: 'willingToRelocate', label: 'Disponibilidade para mudança', autocomplete: [], pattern: /(mudanca|relocat|mudar de cidade)/ },
+  // Só para campos de arquivo (<input type="file">).
+  { key: 'resumeFile', label: 'Arquivo do currículo', autocomplete: [], pattern: /\b(curriculo|curriculum|resume|cv)\b/, exclude: /(carta|cover|portfolio|foto|photo)/ },
 ];
 
 export const PROFILE_FIELD_LABELS: Record<ProfileFieldKey, string> = Object.fromEntries(FIELD_CATALOG.map((e) => [e.key, e.label])) as Record<ProfileFieldKey, string>;
 
 /** Campos que nunca são preenchidos automaticamente. */
 const BLOCKED_PATTERN = /(senha|password|passwd|captcha|recaptcha|\bcpf\b|\brg\b|\bssn\b|social security|passaporte|passport|cartao|credit card|card number|\bcvv\b|\bcvc\b|\btoken\b|\botp\b|codigo de verificacao|verification code|\bpis\b|\bnis\b)/;
-const SUPPORTED_INPUT_TYPES = new Set(['', 'text', 'email', 'tel', 'url', 'search', 'number']);
+const SUPPORTED_INPUT_TYPES = new Set(['', 'text', 'email', 'tel', 'url', 'search', 'number', 'file']);
 
 const CONFIDENCE = { autocomplete: 0.95, label: 0.85, nameOrId: 0.75, placeholder: 0.65 } as const;
 export const AUTO_SELECT_THRESHOLD = 0.75;
@@ -78,7 +80,10 @@ export function matchField(field: FieldDescriptor): MatchCandidate[] {
   ];
   const ac = field.autocomplete.toLowerCase().split(/\s+/).pop() ?? '';
   const best = new Map<ProfileFieldKey, MatchCandidate>();
+  const isFile = field.type === 'file';
   for (const entry of FIELD_CATALOG) {
+    // Campo de arquivo só recebe o arquivo do currículo, e vice-versa.
+    if ((entry.key === 'resumeFile') !== isFile) continue;
     let cand: MatchCandidate | null = null;
     if (ac && entry.autocomplete.includes(ac)) {
       cand = { profileField: entry.key, confidence: CONFIDENCE.autocomplete, reason: `autocomplete="${ac}"` };
@@ -89,6 +94,14 @@ export function matchField(field: FieldDescriptor): MatchCandidate[] {
       }
     }
     if (cand) best.set(entry.key, cand);
+  }
+  // "Cidade / Estado onde mora": campo único pedindo cidade e estado juntos → localização ("Recife, PE").
+  const city = best.get('city');
+  const state = best.get('state');
+  if (city && state && Math.abs(city.confidence - state.confidence) < AMBIGUITY_MARGIN && city.reason === state.reason) {
+    best.delete('city');
+    best.delete('state');
+    best.set('location', { profileField: 'location', confidence: city.confidence, reason: `${city.reason} (cidade e estado no mesmo campo)` });
   }
   return Array.from(best.values()).sort((a, b) => b.confidence - a.confidence);
 }
@@ -158,6 +171,8 @@ export function profileValue(profile: Profile, key: ProfileFieldKey, referenceDa
       const r = profile.preferences.willingToRelocate;
       return r === null ? null : val(r ? 'Sim' : 'Não', profile.preferences.provenance.status !== 'confirmed');
     }
+    case 'resumeFile':
+      return null; // não fica no perfil: vem do contexto (arquivo guardado)
   }
 }
 
@@ -184,8 +199,19 @@ function blockedReason(field: FieldDescriptor): string | null {
   return null;
 }
 
+/** O atributo `accept` do campo aceita o arquivo? (vazio = aceita qualquer um) */
+export function acceptsFile(accept: string | undefined, name: string, type: string): boolean {
+  const rules = (accept ?? '').toLowerCase().split(',').map((a) => a.trim()).filter(Boolean);
+  if (!rules.length) return true;
+  const lower = name.toLowerCase();
+  const mime = type.toLowerCase();
+  return rules.some((a) => (a.startsWith('.') ? lower.endsWith(a) : a.endsWith('/*') ? mime.startsWith(a.slice(0, -1)) : mime === a));
+}
+
+const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
+
 /** Monta o item do plano para um campo, opcionalmente forçando um campo do perfil (escolha manual do usuário). */
-export function planField(field: FieldDescriptor, profile: Profile, forced?: ProfileFieldKey, referenceDate = new Date()): FillPlanItem {
+export function planField(field: FieldDescriptor, profile: Profile, forced?: ProfileFieldKey, referenceDate = new Date(), ctx: FillContext = {}): FillPlanItem {
   const base = { field, candidates: [] as MatchCandidate[], value: null, confidence: 0, selectedByDefault: false, requiresReview: false };
   const blocked = blockedReason(field);
   if (blocked) return { ...base, profileField: null, action: 'blocked', reason: blocked };
@@ -213,8 +239,29 @@ export function planField(field: FieldDescriptor, profile: Profile, forced?: Pro
   }
 
   const entry = FIELD_CATALOG.find((e) => e.key === chosen!.profileField)!;
-  const pv = profileValue(profile, chosen.profileField, referenceDate);
   const common = { profileField: chosen.profileField, confidence: chosen.confidence };
+  const isFile = field.type === 'file';
+  if (isFile !== (chosen.profileField === 'resumeFile')) {
+    return item('ambiguous', isFile ? 'Campos de arquivo só recebem o arquivo do currículo.' : 'O arquivo do currículo só vai em campos de arquivo.', { requiresReview: true });
+  }
+  if (isFile) {
+    const file = ctx.resumeFile;
+    if (!file) return item('no_profile_value', 'Nenhum arquivo de currículo guardado. Guarde o seu em Perfil → "Arquivo do currículo".', common);
+    if (!acceptsFile(field.accept, file.name, file.type)) {
+      return item('ambiguous', `O campo aceita só ${field.accept}; o arquivo guardado é "${file.name}".`, { ...common, requiresReview: true });
+    }
+    if (field.currentValue.trim()) {
+      return baseName(field.currentValue) === file.name
+        ? item('same_value', 'O campo já tem este arquivo.', { ...common, value: file.name })
+        : item('skip_has_value', 'O campo já tem outro arquivo; só será trocado se você marcar.', { ...common, value: file.name, requiresReview: true });
+    }
+    return item('fill', `Anexa "${file.name}". Correspondência por ${chosen.reason}.`, {
+      ...common,
+      value: file.name,
+      selectedByDefault: chosen.confidence >= AUTO_SELECT_THRESHOLD,
+    });
+  }
+  const pv = profileValue(profile, chosen.profileField, referenceDate);
   if (!pv) return item('no_profile_value', `Seu perfil não tem "${entry.label}".`, common);
 
   let value = pv.value;
@@ -244,6 +291,6 @@ export function planField(field: FieldDescriptor, profile: Profile, forced?: Pro
   });
 }
 
-export function buildFillPlan(fields: FieldDescriptor[], profile: Profile, referenceDate = new Date()): FillPlanItem[] {
-  return fields.map((f) => planField(f, profile, undefined, referenceDate));
+export function buildFillPlan(fields: FieldDescriptor[], profile: Profile, referenceDate = new Date(), ctx: FillContext = {}): FillPlanItem[] {
+  return fields.map((f) => planField(f, profile, undefined, referenceDate, ctx));
 }

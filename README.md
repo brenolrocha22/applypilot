@@ -2,7 +2,7 @@
 
 Extensão para Chrome (Manifest V3) que ajuda a gerenciar o perfil profissional, analisar a compatibilidade com vagas de forma explicável e preencher formulários de candidatura com revisão. **Tudo roda localmente**: sem backend, sem contas, sem envio de dados a terceiros e sem IA paga.
 
-> Versão 0.3.0 — protótipo para uso pessoal.
+> Versão 0.4.0 — protótipo para uso pessoal.
 
 ## O que funciona
 
@@ -12,17 +12,18 @@ Extensão para Chrome (Manifest V3) que ajuda a gerenciar o perfil profissional,
 | Origem e estado de cada informação | Confirmado / Extraído de documento / Sugerido pela IA / Pendente |
 | Importação de currículo | PDF (texto selecionável), DOCX, TXT ou texto colado → rascunho revisável, sem sobrescrever dados existentes |
 | Importação de pasta | Currículos + certificados + diplomas + .zip do LinkedIn de uma pasta inteira, com **um botão** "Adicionar tudo ao perfil"; certificados em imagem registrados pelo nome do arquivo (pendentes); módulos de bootcamp agrupáveis |
-| LinkedIn | Exportação oficial de dados (.zip): perfil, resumo, cargos, formação, competências, idiomas, certificações, cursos |
+| LinkedIn | Exportação oficial de dados (.zip): perfil, resumo, cargos, formação, competências, idiomas, certificações, cursos. Competências também direto da página "Competências" do seu perfil (botão no popup) |
 | Vaga da página aberta | Botão no popup lê a vaga da aba atual (dados estruturados do site, texto selecionado ou conteúdo principal) |
-| Preenchimento em sites | Botão no popup lê os campos da aba atual, mostra o plano e preenche só o que você marcar |
+| Preenchimento em sites | Botão no popup lê os campos da aba atual, mostra o plano e preenche só o que você marcar, inclusive **anexando o arquivo do currículo**. O que você digitar e o perfil não tiver pode ser **guardado no perfil** |
+| Cofre | Arquivo `.applypilot` criptografado com sua senha (AES-256) para guardar e retomar todos os dados |
 | Análise de vaga | Texto colado ou capturado da página; extração de requisitos com referência ao trecho original |
 | Motor de fit | 5 dimensões, pesos configuráveis, cobertura, bloqueios independentes da nota |
 | Relatório | Nota, dimensões, obrigatórios, evidências, lacunas, itens a confirmar, fit cultural, recomendação e próximas ações |
 | Vagas salvas | Lista, status da candidatura, anotações, reanálise, exclusão |
 | Preenchimento assistido | Formulário de demonstração local, plano revisável, registro sem valores pessoais |
-| Dados | Exportar (JSON), importar perfil (JSON), excluir tudo |
+| Dados | Cofre com senha, exportar (JSON), importar perfil (JSON), excluir tudo |
 
-Ainda **não** implementado: geração de versões direcionadas do currículo, leitura de texto em imagens (OCR), formulários dentro de iframes de outros domínios, integração específica com LinkedIn, IA. Ver [CHANGELOG.md](CHANGELOG.md).
+Ainda **não** implementado: geração de versões direcionadas do currículo, carta de apresentação no perfil, leitura de texto em imagens (OCR), formulários dentro de iframes de outros domínios, IA. Ver [CHANGELOG.md](CHANGELOG.md).
 
 ## Instalação
 
@@ -63,7 +64,8 @@ Para publicar nas lojas: `npm run package` gera `release/applypilot-<versão>.zi
 3. **Relatório**: confira a nota, os requisitos obrigatórios destacados (independentes da nota), as evidências e o trecho original de cada requisito. **Salvar vaga e análise** guarda o resultado.
 4. **Vagas salvas**: acompanhe o status da candidatura, faça anotações e reanalise após atualizar o perfil.
 5. **Preenchimento assistido**: na página do formulário de candidatura → ícone → **Preencher formulário desta página** → revise e marque os campos → **Preencher**. Nada é enviado: confira e envie você mesmo. (Há também um formulário de demonstração para testes.)
-6. **Configurações**: ajuste os pesos das dimensões, exporte/importe dados ou exclua tudo.
+6. **LinkedIn**: abra o seu perfil no LinkedIn → ícone → **Abrir competências do LinkedIn** → role a página até o fim → ícone → **Importar competências desta página**.
+7. **Configurações**: ajuste os pesos, crie o **cofre com senha** (cópia segura para retomar os dados), exporte/importe ou exclua tudo.
 
 ## Desenvolvimento
 
@@ -84,4 +86,4 @@ Documentação técnica:
 
 ## Privacidade
 
-Os dados ficam em `chrome.storage.local`, somente neste perfil do navegador. Permissões: `storage`, `activeTab` (acesso à aba atual **somente quando você clica** na extensão) e `scripting` (para ler a vaga/os campos nessa aba). Não há acesso permanente a sites, telemetria, servidores ou chamadas de rede. Os arquivos da pasta importada são lidos localmente e não são armazenados — só os dados que você escolhe importar. Desinstalar a extensão apaga os dados — exporte antes se quiser guardá-los.
+Os dados ficam em `chrome.storage.local`, somente neste perfil do navegador. Permissões: `storage`, `activeTab` (acesso à aba atual **somente quando você clica** na extensão) e `scripting` (para ler a vaga/os campos nessa aba). Não há acesso permanente a sites, telemetria, servidores ou chamadas de rede. Os arquivos da pasta importada são lidos localmente e não são armazenados — só os dados que você escolhe importar e, se você usar, o arquivo do currículo para anexar. O cofre é criptografado com uma senha que o ApplyPilot não guarda. Desinstalar a extensão apaga os dados — exporte antes se quiser guardá-los.

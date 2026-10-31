@@ -57,14 +57,17 @@ Regra de dependência: `ui → infra → core`. O `core` não importa nada de `i
 - **Dados externos não confiáveis:** descrições de vaga, currículos e JSON importado são tratados como dados. Texto nunca é executado nem interpretado como instrução (há teste com "instrução maliciosa" na vaga). JSON importado passa por coerção campo a campo (`coerceProfile`), descartando chaves desconhecidas e normalizando enums; proveniência desconhecida vira "Pendente".
 - **Arquivos:** validação de extensão + assinatura binária + tamanho; `.doc` recusado; DOCX lido por regex sobre o XML (macros/objetos ignorados); PDF sem eval e sem XFA.
 - **Renderização:** React escapa todo texto; não há `dangerouslySetInnerHTML`. Links da vaga abrem com `rel="noopener noreferrer"` e só aceitam `http(s)`.
-- **Preenchimento:** nunca envia formulário, não clica em botões, não interage com CAPTCHA, não preenche senha/CPF/RG/cartão/token, não substitui valores existentes sem aprovação. O log não grava valores.
+- **Preenchimento:** nunca envia formulário, não clica em botões, não interage com CAPTCHA, não preenche senha/CPF/RG/cartão/token, não substitui valores existentes sem aprovação. O log não grava valores. O valor de campos de senha nem é lido. Campos de arquivo só recebem o currículo guardado pelo usuário (via `DataTransfer`, igual a escolher o arquivo), com aprovação.
+- **Respostas digitadas → perfil:** só campos reconhecidos, vazios no perfil, de texto, não bloqueados, e só os que o usuário marcar.
+- **Cofre:** WebCrypto (AES-256-GCM + PBKDF2-SHA-256, 600 mil iterações, sal de 16 bytes, IV de 12 bytes aleatórios). A senha nunca é armazenada nem enviada; perdê-la torna o arquivo ilegível.
+- **LinkedIn:** além da exportação oficial (.zip), lê a página de competências do próprio perfil quando o usuário a abre e clica no botão (activeTab). Não há navegação, rolagem ou cliques automáticos nem leitura de outras páginas. Os termos do LinkedIn restringem ferramentas automatizadas: o uso é por conta e escolha do usuário.
 - **Logs:** o código não registra dados pessoais no console.
 - **Exclusão:** "Excluir todos os dados locais" remove todas as chaves; desinstalar também remove.
 
 ### Limites e riscos conhecidos
 
 - `chrome.storage.local` tem cota de ~10 MB; o app limita 300 vagas salvas e 30 registros de preenchimento.
-- Os dados **não são criptografados** em repouso: qualquer pessoa/processo com acesso ao perfil do sistema operacional e do navegador pode lê-los.
+- Os dados no navegador **não são criptografados** em repouso: qualquer pessoa/processo com acesso ao perfil do sistema operacional e do navegador pode lê-los. O cofre protege a **cópia** (arquivo), não o armazenamento interno.
 - Desinstalar a extensão apaga os dados sem confirmação extra do Chrome — exporte backups.
 - Outras extensões não têm acesso ao storage desta extensão, mas malware local tem.
 

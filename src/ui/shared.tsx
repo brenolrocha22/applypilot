@@ -1,5 +1,6 @@
 import { createDefaultStore } from '../infra/storage/adapters';
 import { Repository } from '../infra/storage/repository';
+import type { AttachableFile } from '../core/fill/types';
 import type { RequirementStatus } from '../core/model/fit';
 import { REQUIREMENT_STATUS_LABELS } from '../core/model/fit';
 import type { Importance } from '../core/model/job';
@@ -10,6 +11,14 @@ export const repo = new Repository(createDefaultStore());
 
 export function extensionUrl(path: string): string {
   return typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(path) : `/${path}`;
+}
+
+/** Lê um arquivo escolhido pelo usuário no formato guardado pela extensão (para anexar em formulários). */
+export async function toAttachableFile(file: File): Promise<AttachableFile> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return { name: file.name, type: file.type || 'application/octet-stream', size: file.size, base64: btoa(binary), savedAt: new Date().toISOString() };
 }
 
 export function downloadJson(filename: string, data: unknown): void {

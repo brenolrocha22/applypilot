@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { SourceKind } from '../../core/model/provenance';
 import { createEmptyProfile, nowIso } from '../../core/profile/factory';
 import {
@@ -16,14 +16,17 @@ import { mergeDraftIntoProfile, selectAll } from '../../core/profile/merge';
 import { parseResumeText } from '../../core/resume/parser';
 import type { Profile } from '../../core/model/profile';
 import { extractDocxText } from '../../infra/documents/docx';
-import { repo } from '../shared';
+import { MAX_ATTACHMENT_BYTES } from '../../infra/storage/repository';
+import { repo, toAttachableFile } from '../shared';
 
 /** Pastas com muitos certificados (ex.: módulos de bootcamp) começam agrupadas. */
 const AUTO_GROUP_MIN = 4;
 
+const pathOf = (f: File) => (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
+
 function toBatchFiles(list: FileList): BatchFile[] {
   return Array.from(list).map((f) => ({
-    path: (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name,
+    path: pathOf(f),
     size: f.size,
     lastModified: f.lastModified,
     read: async () => new Uint8Array(await f.arrayBuffer()),
@@ -37,6 +40,8 @@ interface ImportSummary {
   duplicates: number;
   kept: string[];
   matchedExisting: string[];
+  /** Nome do arquivo de currículo guardado para anexar em formulários. */
+  attachedFile?: string;
 }
 
 function emptySummary(): ImportSummary {
@@ -60,6 +65,7 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
   const [useResume, setUseResume] = useState(true);
   const [useLinkedIn, setUseLinkedIn] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const filesByPath = useRef<Map<string, File>>(new Map());
 
   const run = async (list: FileList | null) => {
     if (!list?.length) return;
@@ -67,6 +73,7 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
     setError(null);
     setMerged(null);
     try {
+      filesByPath.current = new Map(Array.from(list).map((f) => [pathOf(f), f]));
       const profile = await repo.loadProfile();
       const { extractPdfPages } = await import('../../infra/documents/pdf');
       const extractors = {
@@ -151,6 +158,12 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
         sum.matchedExisting.push(...c.matchedExisting);
       }
       await repo.saveProfile(profile);
+      // O currículo escolhido também fica guardado para anexar em campos de arquivo dos formulários.
+      const resumeFile = resume && !/\.txt$/i.test(resume.path) ? filesByPath.current.get(resume.path) : undefined;
+      if (resumeFile && resumeFile.size <= MAX_ATTACHMENT_BYTES) {
+        await repo.saveResumeFile(await toAttachableFile(resumeFile));
+        sum.attachedFile = resumeFile.name;
+      }
       setMerged(sum);
     } catch (e) {
       setError(`Falha ao importar: ${(e as Error).message}`);
@@ -217,6 +230,7 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
             </li>
             {merged.duplicates > 0 && <li>{merged.duplicates} item(ns) já existiam e foram ignorados.</li>}
             {merged.kept.length > 0 && <li>Campos que já tinham valor foram mantidos: {merged.kept.join(', ')}.</li>}
+            {merged.attachedFile && <li>Arquivo “{merged.attachedFile}” guardado para anexar nos campos de currículo dos formulários.</li>}
             {merged.matchedExisting.length > 0 && <li>Diploma(s) de formação já cadastrada (datas mantidas): {merged.matchedExisting.join('; ')}.</li>}
           </ul>
           Os itens importados ficam marcados como “Extraído de documento” até você confirmar.{' '}

@@ -80,7 +80,7 @@ export function FillReview(props: {
           })}
         </tbody>
       </table>
-      {hidden > 0 && <p className="small muted">{hidden} campo(s) não reconhecido(s) ou bloqueado(s) (senha, documentos, arquivos) foram omitidos.</p>}
+      {hidden > 0 && <p className="small muted">{hidden} campo(s) não reconhecido(s) ou bloqueado(s) (senha, documentos, termos de aceite) foram omitidos.</p>}
     </>
   );
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0] — 2026-10-31
+
+### Adicionado (relatado no teste do formulário)
+- **Anexo do currículo**: o arquivo do currículo fica guardado na extensão (Perfil → "Arquivo do currículo", ou automaticamente pelo "Adicionar tudo ao perfil") e é anexado, com sua aprovação, em campos de arquivo como "Currículo (arquivo)" / "CV". Respeita o `accept` do campo; limite de 3 MB.
+- **Guardar no perfil o que você digitou**: depois de analisar um formulário, campos que você preencheu na página e que o perfil não tem (resumo, pretensão salarial, nome, contatos, cidade…) podem ser guardados no perfil com um clique. Nunca sobrescreve dados existentes.
+- **Cofre protegido por senha** (Configurações): arquivo `.applypilot` com perfil, vagas, configurações e arquivo do currículo, criptografado com AES-256-GCM (chave derivada da senha por PBKDF2-SHA-256, 600 mil iterações). A senha não é guardada. Serve de cópia segura e para retomar os dados em outro navegador.
+- **Competências do LinkedIn pela página**: no seu perfil do LinkedIn, o popup oferece "Abrir competências do LinkedIn" e, na página de competências, "Importar competências desta página". Leitura só após o clique, sem navegação automática; entram como "Extraído", sem duplicar.
+- **Preenchimento automático do navegador no Perfil**: os dados pessoais usam os tokens `autocomplete` (nome, e-mail, telefone, cidade, estado, país), para o Chrome/Google oferecer os dados salvos.
+
+### Alterado
+- Campo único "Cidade / Estado" passa a usar a localização ("Recife, PE") em vez de ficar ambíguo.
+- O valor de campos de senha da página nunca é lido (antes era lido e descartado).
+
 ## [0.3.0] — 2026-10-31
 
 ### Corrigido (relatado no primeiro teste real)

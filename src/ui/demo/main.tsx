@@ -2,11 +2,12 @@ import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles.css';
 import type { Profile } from '../../core/model/profile';
-import type { FillLog, FillPlanItem, ProfileFieldKey } from '../../core/fill/types';
+import type { AttachableFile, FillLog, FillPlanItem, ProfileFieldKey } from '../../core/fill/types';
 import { buildFillPlan, planField } from '../../core/fill/mapper';
 import { newId } from '../../core/profile/factory';
 import { applyFillPlan, collectFields, type CollectedFields } from '../../infra/fill/domAdapter';
 import { FillReview } from '../components/FillReview';
+import { SaveAnswers } from '../components/SaveAnswers';
 import { extensionUrl, repo } from '../shared';
 
 const form = document.getElementById('demo-form') as HTMLFormElement;
@@ -21,16 +22,18 @@ function AssistPanel() {
   const [plan, setPlan] = useState<FillPlanItem[] | null>(null);
   const [approved, setApproved] = useState<Set<string>>(new Set());
   const [log, setLog] = useState<FillLog | null>(null);
+  const [resumeFile, setResumeFile] = useState<AttachableFile | null>(null);
   const collected = useRef<CollectedFields | null>(null);
 
   useEffect(() => {
     repo.loadProfile().then(setProfile).catch(() => setProfile(null));
+    repo.loadResumeFile().then(setResumeFile);
   }, []);
 
   const analyze = () => {
     if (!profile) return;
     collected.current = collectFields(form);
-    const p = buildFillPlan(collected.current.descriptors, profile);
+    const p = buildFillPlan(collected.current.descriptors, profile, undefined, { resumeFile });
     setPlan(p);
     setApproved(new Set(p.filter((i) => i.selectedByDefault).map((i) => i.field.key)));
     setLog(null);
@@ -38,7 +41,7 @@ function AssistPanel() {
 
   const override = (key: string, field: ProfileFieldKey | '') => {
     if (!plan || !profile) return;
-    setPlan(plan.map((i) => (i.field.key === key ? planField(i.field, profile, field || undefined) : i)));
+    setPlan(plan.map((i) => (i.field.key === key ? planField(i.field, profile, field || undefined, undefined, { resumeFile }) : i)));
     setApproved((s) => {
       const n = new Set(s);
       n.delete(key);
@@ -56,7 +59,7 @@ function AssistPanel() {
 
   const fill = async () => {
     if (!plan || !collected.current) return;
-    const result = applyFillPlan(plan, approved, collected.current.elements, 'Formulário de demonstração', newId());
+    const result = applyFillPlan(plan, approved, collected.current.elements, 'Formulário de demonstração', newId(), { resumeFile });
     setLog(result);
     await repo.addFillLog(result);
   };
@@ -96,6 +99,7 @@ function AssistPanel() {
       )}
 
       {plan && <FillReview plan={plan} approved={approved} onToggle={toggle} onOverride={override} />}
+      {plan && <SaveAnswers key={plan.map((i) => i.field.currentValue).join('|')} plan={plan} onSaved={() => repo.loadProfile().then(setProfile)} />}
     </div>
   );
 }

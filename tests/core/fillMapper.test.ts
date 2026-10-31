@@ -51,17 +51,18 @@ describe('planField', () => {
     expect(planField(field({ label: 'E-mail', currentValue: 'ANA.exemplo@example.com' }), profile).action).toBe('same_value');
   });
 
-  it('bloqueia senha, CPF, CAPTCHA e arquivos', () => {
+  it('bloqueia senha, CPF, CAPTCHA, aceites e arquivos de documentos', () => {
     expect(planField(field({ type: 'password', label: 'Senha' }), profile).action).toBe('blocked');
     expect(planField(field({ label: 'CPF' }), profile).action).toBe('blocked');
     expect(planField(field({ name: 'g-recaptcha-response' }), profile).action).toBe('blocked');
-    expect(planField(field({ type: 'file', label: 'Currículo' }), profile).action).toBe('blocked');
+    expect(planField(field({ type: 'checkbox', label: 'Li e aceito os termos' }), profile).action).toBe('blocked');
+    expect(planField(field({ type: 'file', label: 'Foto do RG' }), profile).action).toBe('blocked');
   });
 
   it('sinaliza campo ambíguo e campo não reconhecido', () => {
-    const ambiguous = planField(field({ label: 'Cidade / Estado' }), profile);
+    const ambiguous = planField(field({ label: 'Telefone ou e-mail' }), profile);
     expect(ambiguous.action).toBe('ambiguous');
-    expect(ambiguous.candidates.map((c) => c.profileField)).toEqual(expect.arrayContaining(['city', 'state']));
+    expect(ambiguous.candidates.map((c) => c.profileField)).toEqual(expect.arrayContaining(['phone', 'email']));
     expect(planField(field({ label: 'Carta de apresentação' }), profile).action).toBe('no_match');
   });
 

@@ -3,7 +3,7 @@ import type { SavedJob } from '../../core/model/job';
 import type { Profile } from '../../core/model/profile';
 import { coerceProfile } from '../../core/profile/validation';
 import { DEFAULT_DIMENSION_WEIGHTS, validateWeights } from '../../core/fit/weights';
-import type { FillLog } from '../../core/fill/types';
+import type { AttachableFile, FillLog } from '../../core/fill/types';
 import type { ExtractedJobPage } from '../page/jobExtractor';
 import type { KeyValueStore } from './adapters';
 
@@ -13,11 +13,14 @@ export const STORAGE_KEYS = {
   settings: 'applypilot.settings',
   fillLogs: 'applypilot.fillLogs',
   pendingJob: 'applypilot.pendingJob',
+  resumeFile: 'applypilot.resumeFile',
 } as const;
 
 export const MAX_SAVED_JOBS = 300;
 export const MAX_FILL_LOGS = 30;
 export const EXPORT_FORMAT = 'applypilot-export';
+/** O armazenamento local da extensão tem ~10 MB no total; o currículo guardado fica bem abaixo disso. */
+export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 
 export interface Settings {
   weights: DimensionWeights;
@@ -30,6 +33,24 @@ export interface ExportBundle {
   profile: Profile | null;
   jobs: SavedJob[];
   settings: Settings;
+  /** Arquivo do currículo guardado para anexar em formulários (opcional). */
+  resumeFile?: AttachableFile | null;
+}
+
+function isAttachableFile(f: unknown): f is AttachableFile {
+  const x = f as AttachableFile;
+  return (
+    !!x &&
+    typeof x.name === 'string' &&
+    x.name.length > 0 &&
+    x.name.length <= 255 &&
+    typeof x.type === 'string' &&
+    typeof x.base64 === 'string' &&
+    typeof x.size === 'number' &&
+    x.size > 0 &&
+    x.size <= MAX_ATTACHMENT_BYTES &&
+    typeof x.savedAt === 'string'
+  );
 }
 
 /** Acesso aos dados locais do ApplyPilot. Única porta de entrada para persistência. */
@@ -120,6 +141,21 @@ export class Repository {
     return Date.now() - Date.parse(job.capturedAt) < 10 * 60 * 1000 ? job : null;
   }
 
+  async saveResumeFile(file: AttachableFile): Promise<void> {
+    if (file.size > MAX_ATTACHMENT_BYTES) throw new Error(`O arquivo tem mais de ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB. Use uma versão mais leve do PDF.`);
+    if (!isAttachableFile(file)) throw new Error('Arquivo inválido.');
+    await this.store.set(STORAGE_KEYS.resumeFile, file);
+  }
+
+  async loadResumeFile(): Promise<AttachableFile | null> {
+    const f = await this.store.get<unknown>(STORAGE_KEYS.resumeFile);
+    return isAttachableFile(f) ? f : null;
+  }
+
+  async removeResumeFile(): Promise<void> {
+    await this.store.remove(STORAGE_KEYS.resumeFile);
+  }
+
   async exportAll(): Promise<ExportBundle> {
     return {
       format: EXPORT_FORMAT,
@@ -128,6 +164,7 @@ export class Repository {
       profile: await this.loadProfile(),
       jobs: await this.listJobs(),
       settings: await this.getSettings(),
+      resumeFile: await this.loadResumeFile(),
     };
   }
 
@@ -145,6 +182,31 @@ export class Repository {
     const candidate = typeof data === 'object' && data !== null && (data as { format?: unknown }).format === EXPORT_FORMAT ? (data as ExportBundle).profile : data;
     if (!candidate) throw new Error('O arquivo não contém um perfil.');
     return coerceProfile(candidate);
+  }
+
+  /**
+   * Substitui os dados locais por um pacote exportado (ex.: aberto do cofre).
+   * Perfil passa por coerção; pesos inválidos são ignorados; vagas sem estrutura mínima são descartadas.
+   */
+  async restoreAll(data: unknown): Promise<{ profile: boolean; jobs: number; resumeFile: boolean }> {
+    if (typeof data !== 'object' || data === null || (data as { format?: unknown }).format !== EXPORT_FORMAT) {
+      throw new Error('O conteúdo não é um pacote de dados do ApplyPilot.');
+    }
+    const bundle = data as Partial<ExportBundle>;
+    const profile = bundle.profile ? coerceProfile(bundle.profile) : null;
+    const jobs = (Array.isArray(bundle.jobs) ? bundle.jobs : [])
+      .filter(
+        (j): j is SavedJob =>
+          !!j && typeof j.id === 'string' && typeof j.createdAt === 'string' && typeof j.parsed === 'object' && typeof j.report === 'object' && typeof j.input === 'object',
+      )
+      .slice(0, MAX_SAVED_JOBS);
+    if (profile) await this.saveProfile(profile);
+    await this.store.set(STORAGE_KEYS.jobs, jobs);
+    const weights = bundle.settings?.weights;
+    if (weights && validateWeights(weights).length === 0) await this.saveSettings({ weights });
+    const resumeFile = isAttachableFile(bundle.resumeFile) ? bundle.resumeFile : null;
+    if (resumeFile) await this.store.set(STORAGE_KEYS.resumeFile, resumeFile);
+    return { profile: !!profile, jobs: jobs.length, resumeFile: !!resumeFile };
   }
 
   async clearAll(): Promise<void> {

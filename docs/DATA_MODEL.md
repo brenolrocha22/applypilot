@@ -69,7 +69,11 @@ engineVersion, generatedAt, referenceDate, weights, overallScore (0–100 | null
 | `applypilot.jobs` | `SavedJob[]` | 300 |
 | `applypilot.settings` | `{ weights }` | — |
 | `applypilot.fillLogs` | `FillLog[]` | 30 mais recentes |
+| `applypilot.pendingJob` | vaga capturada pelo popup, uso único | expira em 10 min |
+| `applypilot.resumeFile` | `AttachableFile` (`name`, `type`, `size`, `base64`, `savedAt`): currículo para anexar | 3 MB |
 
-Exportação: `{ format: 'applypilot-export', version: 1, exportedAt, profile, jobs, settings }`. A importação aceita esse pacote ou um perfil isolado e substitui o perfil atual após confirmação.
+Exportação: `{ format: 'applypilot-export', version: 1, exportedAt, profile, jobs, settings, resumeFile? }`.
+
+Cofre (`.applypilot`): `{ format: 'applypilot-vault', version: 1, createdAt, kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations, salt }, cipher: { name: 'AES-GCM', iv }, data }`; `data` é o pacote de exportação criptografado (base64). Ao abrir, iterações fora de 100 mil–5 milhões são recusadas e o conteúdo passa por `restoreAll` (coerção do perfil, vagas com estrutura mínima, pesos validados). A importação aceita esse pacote ou um perfil isolado e substitui o perfil atual após confirmação.
 
 Migrações: `schemaVersion` existe no perfil; `coerceProfile` preenche campos ausentes com padrões, o que cobre adições compatíveis. Mudanças incompatíveis exigirão uma função de migração por versão.

@@ -2,12 +2,15 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles.css';
 import type { Profile } from '../../core/model/profile';
-import type { FieldDescriptor, FillLog, FillPlanItem, ProfileFieldKey } from '../../core/fill/types';
+import type { AttachableFile, FieldDescriptor, FillLog, FillPlanItem, ProfileFieldKey } from '../../core/fill/types';
 import { buildFillPlan, planField } from '../../core/fill/mapper';
-import { newId } from '../../core/profile/factory';
+import { createEmptyProfile, newId, nowIso } from '../../core/profile/factory';
+import { isLinkedInSkillsPage, linkedInProfileSlug, linkedInSkillsToDraft, linkedInSkillsUrl } from '../../core/linkedin/skillsPage';
+import { mergeDraftIntoProfile, selectAll } from '../../core/profile/merge';
 import type { ExtractedJobPage } from '../../infra/page/jobExtractor';
 import type { ApplyPilotAgent } from '../../content/agent';
 import { FillReview } from '../components/FillReview';
+import { SaveAnswers } from '../components/SaveAnswers';
 import { extensionUrl, repo } from '../shared';
 
 function open(path: string) {
@@ -55,11 +58,14 @@ function Popup() {
   const [approved, setApproved] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resumeFile, setResumeFile] = useState<AttachableFile | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([repo.loadProfile(), repo.listJobs()]).then(([p, jobs]) => {
+    Promise.all([repo.loadProfile(), repo.listJobs(), repo.loadResumeFile()]).then(([p, jobs, file]) => {
       setProfile(p);
       setJobsCount(jobs.length);
+      setResumeFile(file);
     });
     // Fora da extensão (ex.: pré-visualização no navegador) não há chrome.tabs.
     if (typeof chrome !== 'undefined' && chrome.tabs) activeTab().then(setTab);
@@ -67,6 +73,42 @@ function Popup() {
 
   const restriction = restrictionReason(tab?.url);
   const canUsePage = !!tab?.id && !restriction && typeof chrome !== 'undefined' && 'scripting' in chrome;
+
+  const linkedInSlug = linkedInProfileSlug(tab?.url);
+  const onSkillsPage = isLinkedInSkillsPage(tab?.url);
+
+  const openLinkedInSkills = async () => {
+    const url = tab?.url && linkedInSkillsUrl(tab.url);
+    if (tab?.id && url) await chrome.tabs.update(tab.id, { url });
+    window.close();
+  };
+
+  /** Lê as competências da página aberta (o próprio perfil) e adiciona ao perfil as que faltam. */
+  const importLinkedInSkills = async () => {
+    if (!tab?.id) return;
+    const own = linkedInProfileSlug(profile?.personal.linkedinUrl);
+    if (own && linkedInSlug && own !== linkedInSlug && !confirm('Este não parece ser o seu perfil do LinkedIn (endereço diferente do cadastrado). Importar mesmo assim?')) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const texts = await runInTab<string[]>(tab.id, () => globalThis.__applypilotAgent!.linkedInSkills());
+      const now = nowIso();
+      const draft = linkedInSkillsToDraft(texts, now);
+      if (!draft.skills.length) throw new Error('Nenhuma competência encontrada. Role a página até o fim (para carregar todas) e tente de novo.');
+      const current = (await repo.loadProfile()) ?? createEmptyProfile();
+      const m = mergeDraftIntoProfile(current, draft, selectAll(draft), now);
+      await repo.saveProfile(m.profile);
+      setProfile(m.profile);
+      setNotice(
+        `${m.added.skills} competência(s) adicionada(s) ao perfil${m.skippedDuplicates ? `, ${m.skippedDuplicates} já existiam` : ''}. Elas ficam como “Extraído” até você confirmar no Perfil.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error && e.message.startsWith('Nenhuma') ? e.message : friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const analyzePage = async () => {
     if (!tab?.id) return;
@@ -98,7 +140,7 @@ function Popup() {
         );
         return;
       }
-      const plan = buildFillPlan(res.descriptors, profile);
+      const plan = buildFillPlan(res.descriptors, profile, undefined, { resumeFile });
       setApproved(new Set(plan.filter((i) => i.selectedByDefault).map((i) => i.field.key)));
       setView({ kind: 'fill', plan, page: res.page, tabId: tab.id, note: res.frameCount ? `A página tem ${res.frameCount} quadro(s) incorporado(s) que não foram lidos.` : null });
       document.body.style.width = '560px';
@@ -115,8 +157,9 @@ function Popup() {
     try {
       const log = await runInTab<FillLog>(
         view.tabId,
-        ((plan: FillPlanItem[], keys: string[], id: string) => (globalThis as unknown as { __applypilotAgent: ApplyPilotAgent }).__applypilotAgent.applyPlan(plan, keys, id)) as never,
-        [view.plan, Array.from(approved), newId()],
+        ((plan: FillPlanItem[], keys: string[], id: string, file: AttachableFile | null) =>
+          (globalThis as unknown as { __applypilotAgent: ApplyPilotAgent }).__applypilotAgent.applyPlan(plan, keys, id, file)) as never,
+        [view.plan, Array.from(approved), newId(), view.plan.some((i) => i.profileField === 'resumeFile' && approved.has(i.field.key)) ? resumeFile : null],
       );
       await repo.addFillLog(log);
       setView({ kind: 'done', log });
@@ -129,7 +172,7 @@ function Popup() {
 
   const override = (key: string, field: ProfileFieldKey | '') => {
     if (view.kind !== 'fill' || !profile) return;
-    setView({ ...view, plan: view.plan.map((i) => (i.field.key === key ? planField(i.field, profile, field || undefined) : i)) });
+    setView({ ...view, plan: view.plan.map((i) => (i.field.key === key ? planField(i.field, profile, field || undefined, undefined, { resumeFile }) : i)) });
     setApproved((s) => {
       const n = new Set(s);
       n.delete(key);
@@ -161,6 +204,7 @@ function Popup() {
         </button>
         <div style={{ maxHeight: 420, overflow: 'auto', marginTop: 8 }}>
           <FillReview plan={view.plan} approved={approved} onToggle={toggle} onOverride={override} compact />
+          <SaveAnswers plan={view.plan} onSaved={() => repo.loadProfile().then(setProfile)} />
         </div>
       </div>
     );
@@ -206,6 +250,17 @@ function Popup() {
         <button className="btn" disabled={!canUsePage || busy || !profile} onClick={reviewFill} title="Identifica os campos e mostra o que será preenchido">
           Preencher formulário desta página
         </button>
+        {canUsePage && linkedInSlug && (
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={onSkillsPage ? importLinkedInSkills : openLinkedInSkills}
+            title={onSkillsPage ? 'Lê as competências listadas nesta página do seu perfil' : 'Abre a página com todas as competências deste perfil'}
+          >
+            {onSkillsPage ? 'Importar competências desta página do LinkedIn' : 'Abrir competências do LinkedIn'}
+          </button>
+        )}
+        {notice && <div className="alert ok small">{notice}</div>}
         {restriction && <p className="small muted">{restriction}</p>}
         {!profile && profile !== undefined && <p className="small muted">Cadastre seu perfil para usar estas ações.</p>}
         <p className="small muted" style={{ margin: 0 }}>

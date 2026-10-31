@@ -9,7 +9,7 @@ export type ValidationStatus =
   | 'ai_suggested' // Sugerido pela IA (reservado; não há IA no MVP)
   | 'pending'; // Pendente de confirmação
 
-export type SourceKind = 'manual' | 'resume_pdf' | 'resume_docx' | 'resume_text' | 'certificate_file' | 'linkedin_export' | 'json_import' | 'ai';
+export type SourceKind = 'manual' | 'resume_pdf' | 'resume_docx' | 'resume_text' | 'certificate_file' | 'linkedin_export' | 'linkedin_page' | 'json_import' | 'ai';
 
 export interface Provenance {
   source: SourceKind;

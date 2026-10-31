@@ -13,6 +13,8 @@ export interface FieldDescriptor {
   options: { value: string; label: string }[];
   required: boolean;
   disabled: boolean;
+  /** Atributo `accept` de campos de arquivo (ex.: ".pdf,.docx"). */
+  accept?: string;
 }
 
 export type ProfileFieldKey =
@@ -37,7 +39,22 @@ export type ProfileFieldKey =
   | 'englishLevel'
   | 'desiredSalary'
   | 'workMode'
-  | 'willingToRelocate';
+  | 'willingToRelocate'
+  | 'resumeFile';
+
+/** Arquivo guardado na extensão para anexar em formulários (o currículo). */
+export interface AttachableFile {
+  name: string;
+  type: string;
+  size: number;
+  base64: string;
+  savedAt: string;
+}
+
+/** Dados além do perfil disponíveis para o plano de preenchimento. */
+export interface FillContext {
+  resumeFile?: Pick<AttachableFile, 'name' | 'type' | 'size'> | null;
+}
 
 export type FillAction =
   | 'fill' // preencher (campo vazio, correspondência encontrada)

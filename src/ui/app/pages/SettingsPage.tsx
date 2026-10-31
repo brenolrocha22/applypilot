@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DIMENSION_LABELS, type DimensionWeights } from '../../../core/model/fit';
 import { DEFAULT_DIMENSION_WEIGHTS, DIMENSIONS, normalizeWeights, validateWeights } from '../../../core/fit/weights';
 import { downloadJson, repo } from '../../shared';
+import { lockVault, MAX_VAULT_BYTES, MIN_PASSWORD_LENGTH, passwordProblems, unlockVault, VAULT_EXTENSION } from '../../../infra/storage/vault';
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
@@ -10,6 +11,11 @@ export function SettingsPage() {
   const [usage, setUsage] = useState<number | null>(null);
   const [message, setMessage] = useState<{ kind: 'ok' | 'bad'; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const vaultRef = useRef<HTMLInputElement>(null);
+  const [vaultPass, setVaultPass] = useState('');
+  const [vaultConfirm, setVaultConfirm] = useState('');
+  const [openPass, setOpenPass] = useState('');
+  const [vaultBusy, setVaultBusy] = useState(false);
 
   useEffect(() => {
     repo.getSettings().then((s) => setWeights(s.weights));
@@ -52,6 +58,46 @@ export function SettingsPage() {
       if (fileRef.current) fileRef.current.value = '';
     }
   };
+
+  const createVault = async () => {
+    setVaultBusy(true);
+    try {
+      const vault = await lockVault(await repo.exportAll(), vaultPass);
+      downloadJson(`applypilot-cofre-${new Date().toISOString().slice(0, 10)}${VAULT_EXTENSION}`, vault);
+      setVaultPass('');
+      setVaultConfirm('');
+      setMessage({ kind: 'ok', text: 'Cofre criado e baixado. Guarde o arquivo num lugar seguro (ex.: pasta Documentos ou pendrive) e a senha num gerenciador de senhas.' });
+    } catch (e) {
+      setMessage({ kind: 'bad', text: (e as Error).message });
+    } finally {
+      setVaultBusy(false);
+    }
+  };
+
+  const openVault = async (file: File | undefined) => {
+    if (!file) return;
+    setVaultBusy(true);
+    try {
+      if (file.size > MAX_VAULT_BYTES) throw new Error('Arquivo grande demais para um cofre do ApplyPilot.');
+      const data = await unlockVault(await file.text(), openPass);
+      if (!confirm('Restaurar o cofre substitui o perfil, as vagas salvas e as configurações deste navegador. Continuar?')) return;
+      const r = await repo.restoreAll(data);
+      setOpenPass('');
+      setUsage(await repo.bytesInUse());
+      setWeights((await repo.getSettings()).weights);
+      setMessage({
+        kind: 'ok',
+        text: `Cofre restaurado: ${r.profile ? 'perfil' : 'sem perfil'}, ${r.jobs} vaga(s)${r.resumeFile ? ' e arquivo do currículo' : ''}.`,
+      });
+    } catch (e) {
+      setMessage({ kind: 'bad', text: (e as Error).message });
+    } finally {
+      setVaultBusy(false);
+      if (vaultRef.current) vaultRef.current.value = '';
+    }
+  };
+
+  const vaultProblems = passwordProblems(vaultPass, vaultConfirm);
 
   const clearAll = async () => {
     if (!confirm('Excluir permanentemente o perfil, as vagas salvas, as configurações e os registros deste navegador?')) return;
@@ -96,6 +142,54 @@ export function SettingsPage() {
             Salvar pesos
           </button>
           <button onClick={() => setWeights({ ...DEFAULT_DIMENSION_WEIGHTS })}>Restaurar padrão (35/30/15/10/10)</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Cofre protegido por senha</h2>
+        <p className="small muted">
+          Um arquivo com todos os seus dados (perfil, vagas, configurações e o arquivo do currículo), criptografado com uma senha sua (AES-256). Serve para
+          guardar uma cópia segura e para retomar tudo em outro computador ou navegador. A senha nunca é guardada pelo ApplyPilot: sem ela, ninguém —
+          nem você — abre o arquivo. Use uma frase longa e guarde-a num gerenciador de senhas.
+        </p>
+        <div className="grid2">
+          <label>
+            Senha do cofre (mín. {MIN_PASSWORD_LENGTH} caracteres)
+            <input type="password" autoComplete="new-password" value={vaultPass} onChange={(e) => setVaultPass(e.target.value)} />
+          </label>
+          <label>
+            Repita a senha
+            <input type="password" autoComplete="new-password" value={vaultConfirm} onChange={(e) => setVaultConfirm(e.target.value)} />
+          </label>
+        </div>
+        {vaultPass && vaultProblems.length > 0 && <p className="small muted">{vaultProblems.join(' ')}</p>}
+        <div className="row">
+          <button className="primary" disabled={vaultBusy || vaultProblems.length > 0} onClick={createVault}>
+            {vaultBusy ? 'Processando…' : 'Criar e baixar o cofre'}
+          </button>
+        </div>
+        <h3>Retomar dados de um cofre</h3>
+        <div className="row">
+          <input
+            type="password"
+            autoComplete="current-password"
+            placeholder="Senha do cofre"
+            aria-label="Senha do cofre para restaurar"
+            style={{ maxWidth: 260 }}
+            value={openPass}
+            onChange={(e) => setOpenPass(e.target.value)}
+          />
+          <label className={`btn${!openPass || vaultBusy ? ' disabled' : ''}`} style={{ margin: 0 }}>
+            Escolher arquivo {VAULT_EXTENSION}
+            <input
+              ref={vaultRef}
+              type="file"
+              accept={`${VAULT_EXTENSION},application/json`}
+              disabled={!openPass || vaultBusy}
+              style={{ display: 'none' }}
+              onChange={(e) => openVault(e.target.files?.[0])}
+            />
+          </label>
         </div>
       </div>
 

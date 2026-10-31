@@ -7,11 +7,21 @@ export function TextField(props: {
   type?: string;
   placeholder?: string;
   maxLength?: number;
+  /** Token de preenchimento automático do navegador (ex.: "email"), para o Chrome/Google sugerir o dado. */
+  autoComplete?: string;
 }) {
   return (
     <label>
       {props.label}
-      <input type={props.type ?? 'text'} value={props.value} placeholder={props.placeholder} maxLength={props.maxLength ?? 500} onChange={(e) => props.onChange(e.target.value)} />
+      <input
+        type={props.type ?? 'text'}
+        name={props.autoComplete}
+        autoComplete={props.autoComplete ?? 'off'}
+        value={props.value}
+        placeholder={props.placeholder}
+        maxLength={props.maxLength ?? 500}
+        onChange={(e) => props.onChange(e.target.value)}
+      />
     </label>
   );
 }

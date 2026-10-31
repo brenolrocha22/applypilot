@@ -25,6 +25,7 @@ import {
   emptySkill,
   nowIso,
 } from '../../../core/profile/factory';
+import { ResumeFileCard } from '../../components/ResumeFileCard';
 import { hasErrors, validateProfile, type ValidationIssue } from '../../../core/profile/validation';
 import { EDUCATION_LEVEL_LABELS } from '../../../core/knowledge/education';
 import { LANGUAGE_LEVEL_LABELS } from '../../../core/knowledge/languages';
@@ -200,6 +201,8 @@ export function ProfilePage() {
         </div>
       )}
 
+      <ResumeFileCard />
+
       <Section
         title="Dados pessoais"
         actions={
@@ -209,20 +212,23 @@ export function ProfilePage() {
           </>
         }
       >
+        {/* Formulário com tokens de preenchimento: o Chrome/Google oferece seus dados salvos (aceite a sugestão com Tab ou Enter). */}
+        <form autoComplete="on" onSubmit={(e) => e.preventDefault()}>
         <div className="grid2">
-          <TextField label="Nome completo" value={per.fullName} onChange={setPersonal('fullName')} />
-          <TextField label="Título profissional" value={per.headline} onChange={setPersonal('headline')} placeholder="Ex.: Desenvolvedora Front-end" />
-          <TextField label="E-mail" type="email" value={per.email} onChange={setPersonal('email')} />
-          <TextField label="Telefone" type="tel" value={per.phone} onChange={setPersonal('phone')} />
+          <TextField label="Nome completo" autoComplete="name" value={per.fullName} onChange={setPersonal('fullName')} />
+          <TextField label="Título profissional" autoComplete="organization-title" value={per.headline} onChange={setPersonal('headline')} placeholder="Ex.: Desenvolvedora Front-end" />
+          <TextField label="E-mail" type="email" autoComplete="email" value={per.email} onChange={setPersonal('email')} />
+          <TextField label="Telefone" type="tel" autoComplete="tel" value={per.phone} onChange={setPersonal('phone')} />
         </div>
         <div className="grid3">
-          <TextField label="Cidade" value={per.city} onChange={setPersonal('city')} />
-          <TextField label="Estado/UF" value={per.state} onChange={setPersonal('state')} />
-          <TextField label="País" value={per.country} onChange={setPersonal('country')} />
+          <TextField label="Cidade" autoComplete="address-level2" value={per.city} onChange={setPersonal('city')} />
+          <TextField label="Estado/UF" autoComplete="address-level1" value={per.state} onChange={setPersonal('state')} />
+          <TextField label="País" autoComplete="country-name" value={per.country} onChange={setPersonal('country')} />
           <TextField label="LinkedIn (URL)" type="url" value={per.linkedinUrl} onChange={setPersonal('linkedinUrl')} />
           <TextField label="GitHub (URL)" type="url" value={per.githubUrl} onChange={setPersonal('githubUrl')} />
           <TextField label="Portfólio (URL)" type="url" value={per.portfolioUrl} onChange={setPersonal('portfolioUrl')} />
         </div>
+        </form>
       </Section>
 
       <Section
