@@ -13,6 +13,24 @@ export interface MergeSelection {
   items: Partial<Record<ProfileListKey, string[]>>;
 }
 
+/** Seleção "importar tudo" de um rascunho (usada no botão único de importação). */
+export function selectAll(draft: ResumeDraft): MergeSelection {
+  const ids = (list: { id: string }[]) => list.map((i) => i.id);
+  return {
+    personal: Object.keys(draft.personal) as PersonalField[],
+    summary: !!draft.summary,
+    preferences: !!draft.preferences,
+    items: {
+      experiences: ids(draft.experiences),
+      education: ids(draft.education),
+      skills: ids(draft.skills),
+      languages: ids(draft.languages),
+      certifications: ids(draft.certifications),
+      courses: ids(draft.courses),
+    },
+  };
+}
+
 export interface MergeConflict {
   field: string;
   current: string;
@@ -29,7 +47,9 @@ export interface MergeResult {
 const PERSONAL_FIELDS: PersonalField[] = ['fullName', 'headline', 'email', 'phone', 'city', 'state', 'country', 'linkedinUrl', 'githubUrl', 'portfolioUrl'];
 
 const keyFns:Record<ProfileListKey, (item: never) => string> = {
-  experiences: (e: Profile['experiences'][number]) => `${normalizeText(e.title)}|${normalizeText(e.company)}|${e.startDate ?? ''}`,
+  // Mesma empresa e mesmo início = mesma experiência, mesmo com cargo escrito de outro jeito (currículo × LinkedIn).
+  experiences: (e: Profile['experiences'][number]) =>
+    e.company && e.startDate ? `${normalizeText(e.company)}|${e.startDate.slice(0, 7)}` : `${normalizeText(e.title)}|${normalizeText(e.company)}|${e.startDate ?? ''}`,
   education: (e: Profile['education'][number]) => `${normalizeText(e.institution)}|${normalizeText(e.degree)}`,
   skills: (s: Profile['skills'][number]) => resolveSkillId(s.name) ?? normalizeText(s.name),
   languages: (l: Profile['languages'][number]) => resolveLanguageId(l.name) ?? normalizeText(l.name),

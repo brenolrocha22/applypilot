@@ -2,7 +2,7 @@
 
 Extensão para Chrome (Manifest V3) que ajuda a gerenciar o perfil profissional, analisar a compatibilidade com vagas de forma explicável e preencher formulários de candidatura com revisão. **Tudo roda localmente**: sem backend, sem contas, sem envio de dados a terceiros e sem IA paga.
 
-> Versão 0.2.0 — protótipo para uso pessoal.
+> Versão 0.3.0 — protótipo para uso pessoal.
 
 ## O que funciona
 
@@ -11,7 +11,8 @@ Extensão para Chrome (Manifest V3) que ajuda a gerenciar o perfil profissional,
 | Perfil profissional (dados pessoais, resumo, experiências, formação, competências, idiomas, certificações, cursos, preferências) | Cadastro, edição, exclusão, validação, confirmação item a item |
 | Origem e estado de cada informação | Confirmado / Extraído de documento / Sugerido pela IA / Pendente |
 | Importação de currículo | PDF (texto selecionável), DOCX, TXT ou texto colado → rascunho revisável, sem sobrescrever dados existentes |
-| Importação de pasta | Currículos + certificados + diplomas de uma pasta inteira; certificados em imagem registrados pelo nome do arquivo (pendentes); módulos de bootcamp agrupáveis |
+| Importação de pasta | Currículos + certificados + diplomas + .zip do LinkedIn de uma pasta inteira, com **um botão** "Adicionar tudo ao perfil"; certificados em imagem registrados pelo nome do arquivo (pendentes); módulos de bootcamp agrupáveis |
+| LinkedIn | Exportação oficial de dados (.zip): perfil, resumo, cargos, formação, competências, idiomas, certificações, cursos |
 | Vaga da página aberta | Botão no popup lê a vaga da aba atual (dados estruturados do site, texto selecionado ou conteúdo principal) |
 | Preenchimento em sites | Botão no popup lê os campos da aba atual, mostra o plano e preenche só o que você marcar |
 | Análise de vaga | Texto colado ou capturado da página; extração de requisitos com referência ao trecho original |
@@ -57,7 +58,7 @@ Para publicar nas lojas: `npm run package` gera `release/applypilot-<versão>.zi
 
 ## Como usar
 
-1. **Perfil**: clique no ícone → *Importar currículo e certificados* → **Escolher pasta** (a pasta onde você guarda currículo e certificados). Escolha o currículo, revise os certificados e adicione. Itens importados aparecem com borda amarela no perfil até você clicar em **Confirmar**.
+1. **Perfil**: clique no ícone → *Importar currículo e certificados* → **Escolher pasta** (a pasta onde você guarda currículo, certificados e, opcionalmente, o .zip de dados do LinkedIn) → **Adicionar tudo ao perfil**. Itens importados aparecem com borda amarela no perfil até você clicar em **Confirmar** (ou "Confirmar todos").
 2. **Analisar vaga**: abra a vaga no navegador → ícone do ApplyPilot → **Analisar vaga desta página**. Se a leitura pegar texto demais, selecione a descrição da vaga antes de clicar. Também é possível colar a descrição manualmente.
 3. **Relatório**: confira a nota, os requisitos obrigatórios destacados (independentes da nota), as evidências e o trecho original de cada requisito. **Salvar vaga e análise** guarda o resultado.
 4. **Vagas salvas**: acompanhe o status da candidatura, faça anotações e reanalise após atualizar o perfil.

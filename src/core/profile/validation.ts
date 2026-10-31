@@ -106,7 +106,7 @@ const oneOfOrNull = <T extends string>(v: unknown, allowed: readonly T[]): T | n
   typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : null;
 
 const STATUSES: ValidationStatus[] = ['confirmed', 'extracted', 'ai_suggested', 'pending'];
-const SOURCES: SourceKind[] = ['manual', 'resume_pdf', 'resume_docx', 'resume_text', 'certificate_file', 'json_import', 'ai'];
+const SOURCES: SourceKind[] = ['manual', 'resume_pdf', 'resume_docx', 'resume_text', 'certificate_file', 'linkedin_export', 'json_import', 'ai'];
 const EDU_LEVELS: EducationLevel[] = ['high_school', 'technical', 'associate', 'bachelor', 'postgraduate', 'master', 'doctorate', 'other'];
 const LANG_LEVELS: LanguageLevel[] = ['basic', 'intermediate', 'advanced', 'fluent', 'native'];
 const SKILL_CATS: SkillCategory[] = ['technical', 'tool', 'behavioral', 'methodology', 'domain'];

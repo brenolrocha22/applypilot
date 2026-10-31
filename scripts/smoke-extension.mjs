@@ -248,7 +248,7 @@ try {
     const bytes = Uint8Array.from(atob('${pdf}'), c => c.charCodeAt(0));
     const dt = new DataTransfer();
     dt.items.add(new File([bytes], 'cv.pdf', { type: 'application/pdf' }));
-    const input = document.querySelector('input[type=file]:not([multiple]):not([webkitdirectory])');
+    const input = document.querySelector('input[type=file][accept^=".pdf,.docx,.txt,application"]');
     input.files = dt.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
   })()`);
@@ -281,28 +281,58 @@ try {
   check('Sem erros no formulário de demonstração', demo.errors.length === 0, demo.errors.join(' | '));
   demo.close();
 
-  // 7. Importação de vários arquivos (certificado em PDF + imagem)
+  // 7. Botão único: currículo + certificados de uma vez, com uma aba de Perfil já aberta (atualização ao vivo)
   const imp = await openPage(`${base}/app.html#/import`);
-  await waitFor(() => bodyHas(imp, 'Escolher arquivos'));
-  if (process.env.SMOKE_DEBUG) console.log('imp:', await imp.evaluate(`location.href + ' | ' + document.body.innerText.slice(0, 200) + ' | ' + document.querySelectorAll('input[type=file]').length`), imp.errors);
-  const certPdf = makePdf(['Certificamos que', 'ANA EXEMPLO DA SILVA', 'concluiu o curso de Excel Avancado com carga horaria de 20 horas', 'em 10 de marco de 2024']);
+  await waitFor(() => imp.evaluate(`!!document.querySelector('input[type=file][multiple]')`));
+  await imp.evaluate(`chrome.storage.local.remove('applypilot.profile')`);
+  const staleProfileTab = await openPage(`${base}/app.html#/profile`);
+  await waitFor(() => bodyHas(staleProfileTab, 'Dados pessoais'));
+  const resumePdf = makePdf([
+    'Carla Ficticia Souza',
+    'carla@example.com | (11) 98888-7777 | Belo Horizonte - MG',
+    'Resumo',
+    'Analista com foco em dados e automacao.',
+    'Experiencia',
+    'Analista de Dados | Empresa Ficticia Ltda',
+    'Jan 2022 - Atual',
+    'Habilidades',
+    'Python, SQL, Power BI',
+  ]);
+  const certPdf = makePdf(['Certificamos que', 'CARLA FICTICIA SOUZA', 'concluiu o curso de Excel Avancado com carga horaria de 20 horas', 'em 10 de marco de 2024']);
   await imp.evaluate(`(() => {
-    const bytes = Uint8Array.from(atob('${certPdf}'), c => c.charCodeAt(0));
+    const toBytes = (b64) => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     const dt = new DataTransfer();
-    dt.items.add(new File([bytes], 'Excel (Escola Ficticia, 2024).pdf', { type: 'application/pdf' }));
+    dt.items.add(new File([toBytes('${resumePdf}')], 'Curriculo Carla.pdf', { type: 'application/pdf' }));
+    dt.items.add(new File([toBytes('${certPdf}')], 'Excel (Escola Ficticia, 2024).pdf', { type: 'application/pdf' }));
     dt.items.add(new File([new Uint8Array([1, 2, 3])], 'Modulo Python.webp', { type: 'image/webp' }));
     dt.items.add(new File(['body{}'], 'estilo.css', { type: 'text/css' }));
     const input = document.querySelector('input[type=file][multiple]');
     input.files = dt.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
   })()`);
-  const batchOk = await waitFor(() => bodyHas(imp, 'Certificados e diplomas'), 20000);
-  check('Importação em lote lê certificado em PDF e registra imagem pelo nome', !!batchOk && (await bodyHas(imp, 'lido do documento')) && (await bodyHas(imp, 'pelo nome do arquivo')), imp.errors.join(' | '));
+  const batchOk = await waitFor(() => bodyHas(imp, 'O que será adicionado ao perfil'), 20000);
+  check(
+    'Importação em lote: currículo, certificado em PDF e imagem pelo nome',
+    !!batchOk && (await bodyHas(imp, 'Curriculo Carla.pdf')) && (await bodyHas(imp, 'lido do documento')) && (await bodyHas(imp, 'pelo nome do arquivo')),
+    imp.errors.join(' | '),
+  );
   await imp.screenshot('batch');
-  await clickButton(imp, 'Adicionar selecionados ao perfil');
-  check('Certificados adicionados ao perfil', !!(await waitFor(() => bodyHas(imp, 'Adicionados: 2 curso(s)'))));
-  check('Sem erros na importação em lote', imp.errors.length === 0, imp.errors.join(' | '));
+  await clickButton(imp, 'Adicionar tudo ao perfil');
+  check('Botão único adiciona currículo e certificados', !!(await waitFor(() => bodyHas(imp, 'Perfil atualizado'))) && (await bodyHas(imp, 'Dados pessoais preenchidos: nome')));
+  const stored = await imp.evaluate(`chrome.storage.local.get('applypilot.profile').then(r => r['applypilot.profile'])`);
+  check(
+    'Perfil gravado com nome, cidade, resumo, experiência e cursos',
+    stored?.personal?.fullName === 'Carla Ficticia Souza' && stored.personal.city === 'Belo Horizonte' && /foco em dados/.test(stored.summary?.text) && stored.experiences?.length === 1 && stored.courses?.length === 2,
+    JSON.stringify({ nome: stored?.personal?.fullName, cidade: stored?.personal?.city, resumo: stored?.summary?.text, exp: stored?.experiences?.length, cursos: stored?.courses?.length }),
+  );
+  const live = await waitFor(() =>
+    staleProfileTab.evaluate(`[...document.querySelectorAll('input')].some(i => i.value === 'Carla Ficticia Souza') && [...document.querySelectorAll('textarea')].some(t => t.value.includes('foco em dados'))`),
+  );
+  await staleProfileTab.screenshot('profile-live');
+  check('Aba de perfil já aberta se atualiza sozinha', !!live);
+  check('Sem erros na importação e no perfil', imp.errors.length === 0 && staleProfileTab.errors.length === 0, [...imp.errors, ...staleProfileTab.errors].join(' | '));
   imp.close();
+  staleProfileTab.close();
 
   // 8. Agente em página web real (servida localmente): leitura da vaga e preenchimento sem envio
   const server = createServer((req, res) => {

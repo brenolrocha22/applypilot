@@ -11,6 +11,10 @@ import {
   type CertificateMergeResult,
 } from '../../core/resume/certificate';
 import { processBatch, type BatchFile, type BatchResult } from '../../infra/documents/batch';
+import { readLinkedInExport, zipLooksLikeLinkedInExport } from '../../infra/documents/linkedin';
+import { mergeDraftIntoProfile, selectAll } from '../../core/profile/merge';
+import { parseResumeText } from '../../core/resume/parser';
+import type { Profile } from '../../core/model/profile';
 import { extractDocxText } from '../../infra/documents/docx';
 import { repo } from '../shared';
 
@@ -26,6 +30,24 @@ function toBatchFiles(list: FileList): BatchFile[] {
   }));
 }
 
+interface ImportSummary {
+  personalFields: string[];
+  summary: boolean;
+  added: Record<'experiences' | 'education' | 'skills' | 'languages' | 'certifications' | 'courses', number>;
+  duplicates: number;
+  kept: string[];
+  matchedExisting: string[];
+}
+
+function emptySummary(): ImportSummary {
+  return { personalFields: [], summary: false, added: { experiences: 0, education: 0, skills: 0, languages: 0, certifications: 0, courses: 0 }, duplicates: 0, kept: [], matchedExisting: [] };
+}
+
+const PERSONAL_NAMES: Record<string, string> = {
+  fullName: 'nome', headline: 'título', email: 'e-mail', phone: 'telefone', city: 'cidade', state: 'estado', country: 'país',
+  linkedinUrl: 'LinkedIn', githubUrl: 'GitHub', portfolioUrl: 'portfólio',
+};
+
 export function BatchImport({ onResume }: { onResume: (text: string, source: SourceKind) => void }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number; path: string } | null>(null);
@@ -34,7 +56,9 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
   const [grouped, setGrouped] = useState<Set<string>>(new Set());
   const [edits, setEdits] = useState<Record<string, Partial<Pick<CertificateDraft, 'name' | 'kind'>>>>({});
   const [resumePath, setResumePath] = useState<string>('');
-  const [merged, setMerged] = useState<CertificateMergeResult | null>(null);
+  const [merged, setMerged] = useState<ImportSummary | null>(null);
+  const [useResume, setUseResume] = useState(true);
+  const [useLinkedIn, setUseLinkedIn] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const run = async (list: FileList | null) => {
@@ -45,9 +69,12 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
     try {
       const profile = await repo.loadProfile();
       const { extractPdfPages } = await import('../../infra/documents/pdf');
-      const r = await processBatch(toBatchFiles(list), profile?.personal.fullName ?? '', { pdfPages: extractPdfPages, docx: extractDocxText }, (done, total, path) =>
-        setProgress({ done, total, path }),
-      );
+      const extractors = {
+        pdfPages: extractPdfPages,
+        docx: extractDocxText,
+        linkedin: async (b: Uint8Array) => (zipLooksLikeLinkedInExport(b) ? readLinkedInExport(b) : null),
+      };
+      const r = await processBatch(toBatchFiles(list), profile?.personal.fullName ?? '', extractors, (done, total, path) => setProgress({ done, total, path }));
       setResult(r);
       setResumePath(r.resumes[0]?.path ?? '');
       // Pré-seleção: tudo, exceto documentos em nome de outra pessoa.
@@ -86,13 +113,45 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
     return out;
   };
 
+  /**
+   * Botão único: currículo escolhido + exportação do LinkedIn + certificados selecionados, numa só gravação.
+   * Ordem: currículo primeiro (geralmente o mais atualizado); o LinkedIn só completa o que faltar.
+   * Nada já existente é sobrescrito; tudo entra como "extraído"/"pendente" até ser confirmado no perfil.
+   */
   const apply = async () => {
+    if (!result) return;
     setBusy(true);
     try {
-      const profile = (await repo.loadProfile()) ?? createEmptyProfile();
-      const r = mergeCertificates(profile, finalDrafts(), 'certificate_file', nowIso());
-      await repo.saveProfile(r.profile);
-      setMerged(r);
+      const now = nowIso();
+      let profile: Profile = (await repo.loadProfile()) ?? createEmptyProfile();
+      const sum = emptySummary();
+      const mergeDraft = (draft: Parameters<typeof mergeDraftIntoProfile>[1]) => {
+        const before = profile;
+        const m = mergeDraftIntoProfile(profile, draft, selectAll(draft), now);
+        profile = m.profile;
+        for (const k of Object.keys(m.added) as (keyof ImportSummary['added'])[]) sum.added[k] += m.added[k];
+        sum.duplicates += m.skippedDuplicates;
+        sum.kept.push(...m.conflicts.map((c) => c.field));
+        for (const f of Object.keys(PERSONAL_NAMES) as (keyof typeof before.personal)[]) {
+          if (!before.personal[f] && profile.personal[f] && !sum.personalFields.includes(PERSONAL_NAMES[f]!)) sum.personalFields.push(PERSONAL_NAMES[f]!);
+        }
+        if (!before.summary.text && profile.summary.text) sum.summary = true;
+      };
+      const resume = useResume ? result.resumes.find((x) => x.path === resumePath) : undefined;
+      if (resume) mergeDraft(parseResumeText(resume.text, resume.source, now));
+      if (useLinkedIn && result.linkedin) mergeDraft(result.linkedin.draft);
+      const drafts = finalDrafts();
+      if (drafts.length) {
+        const c: CertificateMergeResult = mergeCertificates(profile, drafts, 'certificate_file', now);
+        profile = c.profile;
+        sum.added.courses += c.addedCourses;
+        sum.added.certifications += c.addedCertifications;
+        sum.added.education += c.addedEducation;
+        sum.duplicates += c.skippedDuplicates;
+        sum.matchedExisting.push(...c.matchedExisting);
+      }
+      await repo.saveProfile(profile);
+      setMerged(sum);
     } catch (e) {
       setError(`Falha ao importar: ${(e as Error).message}`);
     } finally {
@@ -118,9 +177,9 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
 
   return (
     <div className="card">
-      <h2>Pasta ou vários arquivos (currículos + certificados)</h2>
+      <h2>Pasta ou vários arquivos (currículo + certificados + LinkedIn)</h2>
       <p className="small muted">
-        Escolha a pasta onde você guarda currículo, diplomas e certificados. O ApplyPilot lê PDF, DOCX e TXT; certificados em imagem (PNG, JPG, WEBP) ou PDFs
+        Escolha a pasta onde você guarda currículo, diplomas e certificados. O ApplyPilot lê PDF, DOCX, TXT e o .zip de dados do LinkedIn; certificados em imagem (PNG, JPG, WEBP) ou PDFs
         escaneados são registrados pelo nome do arquivo e da pasta, como “pendentes de confirmação”. Outros arquivos são ignorados. Nada sai do seu computador.
       </p>
       <div className="row">
@@ -148,10 +207,22 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
 
       {merged && (
         <div className="alert ok" style={{ marginTop: 12 }}>
-          Adicionados: {merged.addedCourses} curso(s), {merged.addedCertifications} certificação(ões), {merged.addedEducation} formação(ões).
-          {merged.skippedDuplicates > 0 && ` ${merged.skippedDuplicates} já existiam e foram ignorados.`}
-          {merged.matchedExisting.length > 0 && ` Diploma(s) correspondentes a formações já cadastradas (mantidas como estão): ${merged.matchedExisting.join('; ')}.`}{' '}
-          <a href="#/profile">Revisar e confirmar no perfil</a>
+          <strong>Perfil atualizado.</strong>
+          <ul>
+            {merged.personalFields.length > 0 && <li>Dados pessoais preenchidos: {merged.personalFields.join(', ')}.</li>}
+            {merged.summary && <li>Resumo profissional preenchido.</li>}
+            <li>
+              Adicionados: {merged.added.experiences} experiência(s), {merged.added.education} formação(ões), {merged.added.skills} competência(s), {merged.added.languages}{' '}
+              idioma(s), {merged.added.courses} curso(s) e {merged.added.certifications} certificação(ões).
+            </li>
+            {merged.duplicates > 0 && <li>{merged.duplicates} item(ns) já existiam e foram ignorados.</li>}
+            {merged.kept.length > 0 && <li>Campos que já tinham valor foram mantidos: {merged.kept.join(', ')}.</li>}
+            {merged.matchedExisting.length > 0 && <li>Diploma(s) de formação já cadastrada (datas mantidas): {merged.matchedExisting.join('; ')}.</li>}
+          </ul>
+          Os itens importados ficam marcados como “Extraído de documento” até você confirmar.{' '}
+          <a href="#/profile">
+            <strong>Abrir o perfil para revisar e confirmar →</strong>
+          </a>
         </div>
       )}
 
@@ -162,36 +233,60 @@ export function BatchImport({ onResume }: { onResume: (text: string, source: Sou
             <strong>{result.skipped.length}</strong> documento(s) não usados e {result.ignoredCount} arquivo(s) ignorados (não são documentos).
           </p>
 
-          {result.resumes.length > 0 && (
-            <div className="card compact">
-              <h3>Currículos encontrados</h3>
-              <p className="small muted">O mais recente vem primeiro. Escolha um para revisar e importar os dados.</p>
-              {result.resumes.map((r) => (
-                <label key={r.path} className="inline" style={{ display: 'flex' }}>
-                  <input type="radio" name="resume" checked={resumePath === r.path} onChange={() => setResumePath(r.path)} />
-                  {r.path} <span className="small muted">({new Date(r.lastModified).toLocaleDateString('pt-BR')})</span>
+          <div className="card compact">
+            <h3>O que será adicionado ao perfil</h3>
+            {result.resumes.length > 0 ? (
+              <div style={{ marginBottom: 8 }}>
+                <label className="inline">
+                  <input type="checkbox" checked={useResume} onChange={(e) => setUseResume(e.target.checked)} />
+                  <strong>Currículo</strong> (dados pessoais, resumo, experiências, formação, competências, idiomas, cursos):
                 </label>
-              ))}
-              <button
-                disabled={!resumePath}
-                onClick={() => {
-                  const r = result.resumes.find((x) => x.path === resumePath);
-                  if (r) onResume(r.text, r.source);
-                }}
-              >
-                Revisar este currículo
-              </button>
-            </div>
-          )}
+                {result.resumes.map((r) => (
+                  <label key={r.path} className="inline small" style={{ display: 'flex', marginLeft: 24 }}>
+                    <input type="radio" name="resume" disabled={!useResume} checked={resumePath === r.path} onChange={() => setResumePath(r.path)} />
+                    {r.path.split('/').pop()} <span className="muted">({new Date(r.lastModified).toLocaleDateString('pt-BR')})</span>
+                  </label>
+                ))}
+                <button
+                  className="small"
+                  style={{ marginLeft: 24 }}
+                  disabled={!resumePath}
+                  onClick={() => {
+                    const r = result.resumes.find((x) => x.path === resumePath);
+                    if (r) onResume(r.text, r.source);
+                  }}
+                >
+                  Prefiro revisar o currículo item a item antes
+                </button>
+              </div>
+            ) : (
+              <p className="small muted">Nenhum currículo com texto legível foi encontrado.</p>
+            )}
+            {result.linkedin ? (
+              <label className="inline" style={{ display: 'flex', marginBottom: 8 }}>
+                <input type="checkbox" checked={useLinkedIn} onChange={(e) => setUseLinkedIn(e.target.checked)} />
+                <span>
+                  <strong>Exportação do LinkedIn</strong> ({result.linkedin.path.split('/').pop()}): {result.linkedin.draft.experiences.length} cargo(s),{' '}
+                  {result.linkedin.draft.education.length} formação(ões), {result.linkedin.draft.skills.length} competência(s) — completa o que faltar no currículo.
+                </span>
+              </label>
+            ) : (
+              <p className="small muted">
+                Exportação do LinkedIn não encontrada. Para incluí-la, baixe seus dados do LinkedIn (veja “LinkedIn” abaixo) e coloque o .zip nesta pasta.
+              </p>
+            )}
+            <p className="small" style={{ marginBottom: 8 }}>
+              <strong>Certificados e diplomas:</strong> {selected.size} selecionado(s) — revise a lista abaixo se quiser.
+            </p>
+            <button className="primary" disabled={busy || (!(useResume && resumePath) && !(useLinkedIn && result.linkedin) && selected.size === 0)} onClick={apply}>
+              Adicionar tudo ao perfil
+            </button>
+            <p className="small muted" style={{ marginTop: 6 }}>Nada que já está no seu perfil é substituído. Você confirma cada item depois, no perfil.</p>
+          </div>
 
           {byFolder.length > 0 && (
             <>
-              <div className="row between" style={{ margin: '12px 0 8px' }}>
-                <h3 style={{ margin: 0 }}>Certificados e diplomas ({selected.size} selecionados)</h3>
-                <button className="primary" disabled={busy || selected.size === 0} onClick={apply}>
-                  Adicionar selecionados ao perfil
-                </button>
-              </div>
+              <h3 style={{ margin: '12px 0 8px' }}>Certificados e diplomas ({selected.size} selecionados)</h3>
               {byFolder.map(([folder, items]) => {
                 const allOn = items.every((c) => selected.has(c.id));
                 return (

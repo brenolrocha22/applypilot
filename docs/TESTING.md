@@ -25,11 +25,14 @@ Dados 100% fictícios em `tests/fixtures/data.ts`.
 | `tests/infra/batchAndPage.test.ts` (jsdom) | Lote (ignora não documentos, separa currículos/certificados/outros, PDF em imagem, arquivo falso), extração de vaga da página (JSON-LD em `@graph`, seleção, conteúdo principal, JSON inválido, HTML sem execução de scripts), vaga pendente de uso único |
 | `tests/infra/repository.test.ts` | Persistência de perfil, vagas (ordem, atualização, exclusão), relatório preservado, configurações, limite de logs, exportação/importação, exclusão total, adaptador `chrome.storage.local` (mock) |
 
-Resultado da última execução (2026-10-31, v0.2.0): **9 arquivos, 113 testes, todos passando.**
+| `tests/core/linkedin.test.ts` | CSV (aspas, quebras de linha, BOM, notas antes do cabeçalho), exportação do LinkedIn → rascunho (sem data de nascimento/endereço), níveis de idioma PT/EN, importação em um clique currículo + LinkedIn sem duplicar experiências |
+| `tests/infra/linkedinZip.test.ts` | ZIP com várias entradas e limite total, .zip do LinkedIn (reconhecimento, mensagens não lidas, .zip comum recusado, detecção na pasta), aviso de alteração do perfil entre abas (memória e `chrome.storage.onChanged`) |
+
+Resultado da última execução (2026-10-31, v0.3.0): **11 arquivos, 126 testes, todos passando.**
 
 ## Teste de fumaça E2E (`scripts/smoke-extension.mjs`)
 
-Sem dependências: inicia um navegador Chromium headless com a extensão de `dist/` e o controla pelo DevTools Protocol (WebSocket nativo do Node 22+). Verifica 26 itens:
+Sem dependências: inicia um navegador Chromium headless com a extensão de `dist/` e o controla pelo DevTools Protocol (WebSocket nativo do Node 22+). Verifica 28 itens:
 
 - extensão carregada; popup, app, configurações e formulário de demonstração renderizam **sem erros de console** (valida a CSP do MV3);
 - perfil gravado em `chrome.storage.local` é recuperado e exibido;
@@ -37,12 +40,12 @@ Sem dependências: inicia um navegador Chromium headless com a extensão de `dis
 - salvar vaga e vê-la em "Vagas salvas";
 - importação de um **PDF real** gerado em memória (valida o worker do pdf.js);
 - formulário de demonstração: nome/e-mail/inglês preenchidos, portfólio existente preservado, CPF e senha intocados, log sem valores pessoais;
-- importação de vários arquivos (certificado em PDF lido do texto, imagem registrada pelo nome, CSS ignorado) e inclusão no perfil;
+- importação de vários arquivos com o botão único (currículo + certificado em PDF + imagem pelo nome; CSS ignorado): nome, cidade, resumo, experiência e cursos gravados, e uma **aba de Perfil já aberta se atualiza sozinha**;
 - agente numa página web servida localmente: leitura da vaga pelo JSON-LD, URL sem query string, coleta de campos, preenchimento do campo aprovado sem enviar o formulário.
 
 Navegador: o Google Chrome "branded" 137+ ignora `--load-extension`; o script usa Microsoft Edge ou Chromium automaticamente, ou o caminho passado como argumento (`node scripts/smoke-extension.mjs <navegador>`). Capturas opcionais: `SMOKE_SCREENSHOTS=<pasta> npm run test:e2e`.
 
-Resultado da última execução (Edge headless, Windows, v0.2.0): **26/26 verificações passaram.**
+Resultado da última execução (Edge headless, Windows, v0.3.0): **28/28 verificações passaram** (duas execuções seguidas).
 
 ## Calibração com documentos reais
 

@@ -1,4 +1,5 @@
 import type { SourceKind } from '../../core/model/provenance';
+import type { ResumeDraft } from '../../core/resume/parser';
 import {
   certificateFromPath,
   classifyByPath,
@@ -25,6 +26,8 @@ export interface BatchFile {
 export interface Extractors {
   pdfPages(bytes: Uint8Array): Promise<string[]>;
   docx(bytes: Uint8Array): Promise<string>;
+  /** Lê um .zip; devolve o rascunho se for a exportação de dados do LinkedIn, senão null. */
+  linkedin?(bytes: Uint8Array): Promise<ResumeDraft | null>;
 }
 
 export interface FoundResume {
@@ -40,20 +43,24 @@ export interface BatchResult {
   skipped: { path: string; reason: string }[];
   /** Arquivos ignorados por não serem documentos (estilos, scripts, executáveis…), só a contagem. */
   ignoredCount: number;
+  /** Exportação de dados do LinkedIn encontrada na seleção (a mais recente). */
+  linkedin: { path: string; draft: ResumeDraft } | null;
 }
 
 export const MAX_BATCH_FILES = 300;
 const DOC_EXT = new Set(['pdf', 'docx', 'txt']);
 const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'webp']);
+const ARCHIVE_EXT = new Set(['zip']);
 /** Pastas de páginas salvas ("X_files") e pastas ocultas/sistema não são lidas. */
 const IGNORED_DIR = /(^|\/)(\.[^/]+|node_modules|__macosx|[^/]*_files)(\/|$)/i;
 
-export function isCandidate(path: string): 'document' | 'image' | null {
+export function isCandidate(path: string): 'document' | 'image' | 'archive' | null {
   const p = path.replace(/\\/g, '/');
   if (IGNORED_DIR.test(p)) return null;
   const ext = p.split('.').pop()?.toLowerCase() ?? '';
   if (DOC_EXT.has(ext)) return 'document';
   if (IMAGE_EXT.has(ext)) return 'image';
+  if (ARCHIVE_EXT.has(ext)) return 'archive';
   return null;
 }
 
@@ -65,7 +72,7 @@ export async function processBatch(
   extractors: Extractors,
   onProgress?: (done: number, total: number, path: string) => void,
 ): Promise<BatchResult> {
-  const result: BatchResult = { resumes: [], certificates: [], skipped: [], ignoredCount: 0 };
+  const result: BatchResult = { resumes: [], certificates: [], skipped: [], ignoredCount: 0, linkedin: null };
   const candidates = files.filter((f) => {
     const ok = isCandidate(f.path) !== null;
     if (!ok) result.ignoredCount++;
@@ -75,6 +82,7 @@ export async function processBatch(
     result.skipped.push({ path: '(seleção)', reason: `Mais de ${MAX_BATCH_FILES} documentos: apenas os primeiros ${MAX_BATCH_FILES} foram processados.` });
   }
   const drafts: CertificateDraft[] = [];
+  let linkedinModified = 0;
 
   const list = candidates.slice(0, MAX_BATCH_FILES);
   for (let i = 0; i < list.length; i++) {
@@ -89,6 +97,19 @@ export async function processBatch(
 
     if (f.size > MAX_BATCH_FILE_BYTES) {
       result.skipped.push({ path: f.path, reason: 'Arquivo maior que 30 MB.' });
+      continue;
+    }
+    if (kind === 'archive') {
+      // Só a exportação do LinkedIn é aproveitada; outros .zip são ignorados (não são extraídos).
+      const draft = extractors.linkedin ? await extractors.linkedin(await f.read()).catch(() => null) : null;
+      if (draft) {
+        if (!result.linkedin || f.lastModified > linkedinModified) {
+          result.linkedin = { path: f.path, draft };
+          linkedinModified = f.lastModified;
+        }
+      } else {
+        result.ignoredCount++;
+      }
       continue;
     }
     if (kind === 'image') {

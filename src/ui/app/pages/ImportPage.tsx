@@ -6,6 +6,7 @@ import { parseResumeText, type PersonalField, type ResumeDraft } from '../../../
 import { EDUCATION_LEVEL_LABELS } from '../../../core/knowledge/education';
 import { LANGUAGE_LEVEL_LABELS } from '../../../core/knowledge/languages';
 import { extractResumeText } from '../../../infra/documents/extract';
+import { readLinkedInExport } from '../../../infra/documents/linkedin';
 import { ProvenanceBadge, repo } from '../../shared';
 import { BatchImport } from '../../components/BatchImport';
 import { navigate } from '../App';
@@ -37,8 +38,23 @@ export function ImportPage() {
   const [selItems, setSelItems] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<MergeResult | null>(null);
 
-  const loadDraft = (text: string, source: ResumeDraft['source']) => {
-    const d = parseResumeText(text, source);
+  const loadDraft = (text: string, source: ResumeDraft['source']) => showDraft(parseResumeText(text, source), text);
+
+  const onLinkedInZip = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (file.size > 50 * 1024 * 1024) throw new Error('Arquivo maior que 50 MB.');
+      showDraft(await readLinkedInExport(new Uint8Array(await file.arrayBuffer())), '');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const showDraft = (d: ResumeDraft, text: string) => {
     setRawText(text);
     setDraft(d);
     setResult(null);
@@ -127,7 +143,32 @@ export function ImportPage() {
       <BatchImport onResume={(text, source) => loadDraft(text, source)} />
 
       <div className="card">
-        <h2>Um único currículo</h2>
+        <h2>LinkedIn</h2>
+        <p className="small">
+          O LinkedIn não permite que extensões leiam o seu perfil automaticamente (é contra os termos de uso e pode bloquear a conta). O caminho oficial é a
+          exportação dos seus dados — você baixa uma vez e o ApplyPilot lê tudo:
+        </p>
+        <ol className="small">
+          <li>
+            No LinkedIn, clique em <strong>Eu</strong> → <strong>Configurações e privacidade</strong> → <strong>Privacidade de dados</strong> →{' '}
+            <strong>Obter uma cópia dos seus dados</strong>.
+          </li>
+          <li>
+            Marque <strong>Perfil</strong>, <strong>Cargos</strong>, <strong>Formação acadêmica</strong>, <strong>Competências</strong>, <strong>Certificações</strong>,{' '}
+            <strong>Idiomas</strong> e <strong>Cursos</strong> (ou “Quero tudo”) e clique em <strong>Solicitar arquivo</strong>.
+          </li>
+          <li>O LinkedIn envia por e-mail o link do arquivo .zip (normalmente em minutos). Baixe-o.</li>
+          <li>Coloque o .zip na sua pasta de certificados (ele entra junto no “Adicionar tudo”) ou escolha-o aqui:</li>
+        </ol>
+        <label className="btn" style={{ margin: 0 }}>
+          Escolher o .zip do LinkedIn
+          <input type="file" accept=".zip,application/zip" style={{ display: 'none' }} disabled={busy} onChange={(e) => onLinkedInZip(e.target.files?.[0])} />
+        </label>
+        <p className="small muted" style={{ marginTop: 6 }}>Só os arquivos de perfil são lidos; mensagens, conexões e outros dados do .zip são ignorados.</p>
+      </div>
+
+      <div className="card">
+        <h2>Só um currículo</h2>
         <input type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
         <p className="small muted" style={{ marginTop: 6 }}>
           Formatos: PDF (com texto selecionável), DOCX ou TXT, até 10 MB. PDFs escaneados (imagem) não são suportados.
@@ -174,7 +215,7 @@ export function ImportPage() {
             <div className="row between">
               <h2>Revise o que foi extraído do currículo</h2>
               <button className="primary" onClick={apply} disabled={busy}>
-                Adicionar selecionados ao perfil
+                Adicionar estes dados ao perfil
               </button>
             </div>
             {draft.warnings.length > 0 && (
@@ -186,12 +227,14 @@ export function ImportPage() {
                 </ul>
               </div>
             )}
+            {rawText && (
             <details>
               <summary>Texto extraído ({rawText.length} caracteres)</summary>
               <pre className="snippet" style={{ maxHeight: 300, overflow: 'auto' }}>
                 {rawText}
               </pre>
             </details>
+            )}
           </div>
 
           {Object.keys(draft.personal).length > 0 && (
@@ -252,7 +295,7 @@ export function ImportPage() {
           {renderList({ title: 'Certificações', items: draft.certifications, label: (c) => `${c.name}${c.issuer ? ` — ${c.issuer}` : ''}` })}
           {renderList({ title: 'Cursos', items: draft.courses, label: (c) => `${c.name}${c.hours ? ` (${c.hours}h)` : ''}` })}
           <button className="primary" onClick={apply} disabled={busy}>
-            Adicionar selecionados ao perfil
+            Adicionar estes dados ao perfil
           </button>
         </>
       )}

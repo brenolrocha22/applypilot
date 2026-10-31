@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   AutonomyPreference,
   CollaborationPreference,
@@ -50,16 +50,37 @@ export function ProfilePage() {
   const [dirty, setDirty] = useState(false);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [message, setMessage] = useState<{ kind: 'ok' | 'bad'; text: string } | null>(null);
+  /** Versão (updatedAt) do perfil gravado que esta tela carregou — detecta alterações feitas em outra aba. */
+  const version = useRef<string | null>(null);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  const [staleNotice, setStaleNotice] = useState(false);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     repo
       .loadProfile()
-      .then((p) => setProfile(p ?? createEmptyProfile()))
+      .then((p) => {
+        version.current = p?.updatedAt ?? null;
+        setProfile(p ?? createEmptyProfile());
+        setDirty(false);
+        setStaleNotice(false);
+      })
       .catch(() => {
         setMessage({ kind: 'bad', text: 'Não foi possível ler o perfil salvo. Um perfil vazio foi carregado; seus dados originais não foram alterados.' });
         setProfile(createEmptyProfile());
       });
   }, []);
+
+  useEffect(() => {
+    reload();
+    // Importações e outras abas atualizam o perfil: sem edições pendentes, recarrega; com edições, avisa.
+    return repo.onProfileChange(async () => {
+      const stored = await repo.loadProfile().catch(() => null);
+      if (!stored || stored.updatedAt === version.current) return; // gravação feita por esta própria tela
+      if (dirtyRef.current) setStaleNotice(true);
+      else reload();
+    });
+  }, [reload]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -95,9 +116,24 @@ export function ProfilePage() {
       return;
     }
     try {
+      const stored = await repo.loadProfile().catch(() => null);
+      if (stored && version.current !== null && stored.updatedAt !== version.current) {
+        const overwrite = confirm(
+          [
+            'O perfil foi alterado em outra aba ou por uma importação depois que esta tela foi aberta.',
+            '',
+            'OK = sobrescrever com o que está nesta tela',
+            'Cancelar = manter os dados atuais e recarregar',
+          ].join('\n'),
+        );
+        if (!overwrite) {
+          reload();
+          return;
+        }
+      }
       const clean = structuredClone(profile);
       for (const e of clean.experiences) e.achievements = e.achievements.map((a) => a.trim()).filter(Boolean);
-      await repo.saveProfile(clean);
+      version.current = await repo.saveProfile(clean);
       setDirty(false);
       setMessage({ kind: 'ok', text: 'Perfil salvo localmente.' });
     } catch (e) {
@@ -139,6 +175,12 @@ export function ProfilePage() {
         </div>
       </div>
 
+      {staleNotice && (
+        <div className="alert warn">
+          O perfil foi atualizado em outra aba (por exemplo, por uma importação). Suas edições nesta tela ainda não foram salvas.{' '}
+          <button onClick={reload}>Carregar dados atualizados (descarta edições desta tela)</button>
+        </div>
+      )}
       {message && <div className={`alert ${message.kind}`}>{message.text}</div>}
       {issues.length > 0 && (
         <div className={`alert ${hasErrors(issues) ? 'bad' : 'warn'}`}>

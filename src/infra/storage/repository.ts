@@ -42,8 +42,16 @@ export class Repository {
     return coerceProfile(raw);
   }
 
-  async saveProfile(profile: Profile): Promise<void> {
-    await this.store.set(STORAGE_KEYS.profile, { ...profile, updatedAt: new Date().toISOString() });
+  /** Salva o perfil e devolve o carimbo de versão gravado (updatedAt). */
+  async saveProfile(profile: Profile): Promise<string> {
+    const updatedAt = new Date().toISOString();
+    await this.store.set(STORAGE_KEYS.profile, { ...profile, updatedAt });
+    return updatedAt;
+  }
+
+  /** Avisa quando o perfil é alterado por outra página (ex.: importação em outra aba). */
+  onProfileChange(cb: () => void): () => void {
+    return this.store.subscribe ? this.store.subscribe(STORAGE_KEYS.profile, cb) : () => undefined;
   }
 
   async listJobs(): Promise<SavedJob[]> {

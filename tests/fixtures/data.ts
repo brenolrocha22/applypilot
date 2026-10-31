@@ -121,3 +121,22 @@ export const JOB: JobInput = {
   sourceUrl: 'https://example.com/vaga/123',
   description: JOB_TEXT,
 };
+
+// CSVs fictícios no formato da exportação "Obter uma cópia dos seus dados" do LinkedIn.
+export const LINKEDIN_FILES: Record<string, string> = {
+  'Profile.csv':
+    '﻿First Name,Last Name,Maiden Name,Address,Birth Date,Headline,Summary,Industry,Zip Code,Geo Location,Twitter Handles,Websites,Instant Messengers\n' +
+    'Ana,Exemplo,,"Rua Fictícia, 100","Jan 1, 1990",Analista de Dados,"Profissional de dados.\nFoco em Python, SQL e BI.",Tecnologia,00000-000,"Recife, Pernambuco, Brasil",,"[PORTFOLIO:https://ana.example.com,OTHER:https://github.com/ana-exemplo]",\n',
+  'Positions.csv':
+    'Company Name,Title,Description,Location,Started On,Finished On\n' +
+    'Empresa Fictícia A,Analista de Dados,"Painéis em Power BI.\n- Automatizei relatórios com Python",Recife,Mar 2023,\n' +
+    'Empresa Fictícia B,Consultora de Vendas,Vendas B2B.,"São Paulo, SP",Jan 2020,Dec 2022\n',
+  'Education.csv':
+    'School Name,Start Date,End Date,Notes,Degree Name,Activities\nUniversidade Fictícia,2015,2019,,"Bacharelado, Administração",\n',
+  'Skills.csv': 'Name\nPython\nSQL\nPower BI\nNegociação\nPython\n',
+  'Languages.csv': 'Name,Proficiency\nInglês,Full professional proficiency\nEspanhol,Proficiência profissional limitada\nFrancês,\n',
+  'Certifications.csv': 'Name,Url,Authority,Started On,Finished On,License Number\nCertificação Fictícia de Dados,https://cred.example.com/1,Instituto Fictício,Jun 2024,,ABC\n',
+  'Courses.csv': 'Name,Number\nEstatística Básica,\n',
+  'Email Addresses.csv': 'Email Address,Confirmed,Primary,Updated On\nantigo@example.com,Yes,No,1/1/20\nana@example.com,Yes,Yes,1/1/24\n',
+  'PhoneNumbers.csv': 'Extension,Number,Type\n,+55 81 90000-0000,Mobile\n',
+};

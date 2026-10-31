@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] — 2026-10-31
+
+### Corrigido (relatado no primeiro teste real)
+- Dados pessoais e resumo do currículo não chegavam ao perfil: havia dois botões "Adicionar selecionados ao perfil" e o da área de certificados importava só certificados. Agora há um **botão único "Adicionar tudo ao perfil"** (currículo + LinkedIn + certificados) e os demais botões têm nomes distintos.
+- Aba de Perfil aberta antes de uma importação ficava desatualizada e, ao salvar, podia sobrescrever os dados importados. Agora a tela se atualiza sozinha; se houver edições não salvas, avisa e pede confirmação antes de sobrescrever.
+
+### Adicionado
+- **LinkedIn**: leitura da exportação oficial de dados ("Obter uma cópia dos seus dados", .zip com CSVs) — perfil, resumo, cargos, formação, competências, idiomas, certificações, cursos, e-mail e telefone. O .zip pode ser escolhido diretamente ou ficar na pasta importada. Mensagens, conexões e demais dados do .zip não são lidos; data de nascimento e endereço completo não são importados.
+- Experiências de fontes diferentes (currículo × LinkedIn) com mesma empresa e mesmo início não são duplicadas.
+
+### Testes
+- 126 testes unitários/integração e 28 verificações E2E (inclui o cenário do relato: aba de perfil aberta + importação em outra aba).
+
 ## [0.2.0] — 2026-10-31
 
 ### Adicionado
