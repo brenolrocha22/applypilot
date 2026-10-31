@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Formulário de demonstração — ApplyPilot</title>
+    <link rel="icon" href="/icons/icon32.png" />
+  </head>
+  <body>
+    <div class="demo-layout">
+      <main class="demo-form-wrap">
+        <p class="demo-banner">Página de demonstração local. Nenhum dado é enviado: o botão “Enviar candidatura” não envia nada.</p>
+        <h1>Candidatura — Empresa Demonstração (fictícia)</h1>
+        <p class="muted">Vaga: Pessoa Desenvolvedora Front-end</p>
+        <form id="demo-form" novalidate>
+          <fieldset>
+            <legend>Dados pessoais</legend>
+            <div class="grid2">
+              <label>Primeiro nome * <input name="first_name" autocomplete="given-name" required /></label>
+              <label>Sobrenome * <input name="last_name" autocomplete="family-name" required /></label>
+            </div>
+            <label for="email">E-mail *</label>
+            <input id="email" name="email" type="email" required />
+            <label for="tel">Celular / WhatsApp</label>
+            <input id="tel" name="phone" type="tel" placeholder="(00) 00000-0000" />
+            <div class="grid2">
+              <label>Cidade <input name="city" /></label>
+              <label>Estado (UF)
+                <select name="uf">
+                  <option value="">Selecione</option>
+                  <option>SP</option><option>RJ</option><option>MG</option><option>PR</option><option>RS</option><option>SC</option><option>BA</option><option>PE</option><option>DF</option>
+                </select>
+              </label>
+            </div>
+            <label>CPF <input name="cpf" placeholder="000.000.000-00" /></label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Perfil profissional</legend>
+            <label>URL do LinkedIn <input name="linkedin" type="url" /></label>
+            <label>Portfólio ou site pessoal <input name="portfolio" type="url" value="https://meu-site-antigo.example.com" /></label>
+            <div class="grid2">
+              <label>Cargo atual <input name="current_title" /></label>
+              <label>Empresa atual <input name="current_company" /></label>
+            </div>
+            <div class="grid2">
+              <label>Anos de experiência <input name="years" type="number" min="0" /></label>
+              <label>Escolaridade
+                <select name="education">
+                  <option value="">Selecione</option>
+                  <option value="medio">Ensino médio</option>
+                  <option value="tecnico">Técnico</option>
+                  <option value="superior">Graduação</option>
+                  <option value="pos">Pós-graduação / MBA</option>
+                  <option value="mestrado">Mestrado</option>
+                  <option value="doutorado">Doutorado</option>
+                </select>
+              </label>
+            </div>
+            <label>Nível de inglês
+              <select name="english">
+                <option value="">Selecione</option>
+                <option value="1">Básico</option>
+                <option value="2">Intermediário</option>
+                <option value="3">Avançado</option>
+                <option value="4">Fluente</option>
+              </select>
+            </label>
+            <label>Cidade / Estado onde mora <input name="city_state" /></label>
+            <label>Resumo profissional <textarea name="summary" rows="4"></textarea></label>
+            <label>Carta de apresentação <textarea name="cover_letter" rows="4" placeholder="Por que você quer trabalhar conosco?"></textarea></label>
+            <label>Pretensão salarial <input name="salary" /></label>
+            <label>Currículo (arquivo) <input name="resume" type="file" /></label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Acesso</legend>
+            <label>Crie uma senha <input name="password" type="password" /></label>
+            <div class="fake-captcha" aria-label="Verificação CAPTCHA (simulada)">☐ Não sou um robô (simulação — o ApplyPilot não interage com CAPTCHAs)</div>
+            <label class="inline"><input type="checkbox" name="terms" /> Li e aceito os termos</label>
+          </fieldset>
+          <button type="submit">Enviar candidatura</button>
+        </form>
+      </main>
+      <aside id="assist-root" class="demo-assist"></aside>
+    </div>
+    <script type="module" src="/src/ui/demo/main.tsx"></script>
+  </body>
+</html>
