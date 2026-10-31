@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/smoke-extension.mjs",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "package": "npm run build && node scripts/package.mjs"
   },
   "dependencies": {
     "pdfjs-dist": "4.10.38",

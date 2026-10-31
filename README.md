@@ -41,6 +41,20 @@ No Chrome:
 
 Após alterar o código, rode `npm run build` (ou `npm run dev` para rebuild contínuo) e clique em **Recarregar** no card da extensão.
 
+### Navegadores compatíveis
+
+O mesmo build funciona em todos os navegadores baseados em Chromium — não há versão separada.
+
+| Navegador | Situação | Instalação para teste |
+|---|---|---|
+| Google Chrome | Compatível | `chrome://extensions` → Modo do desenvolvedor → Carregar sem compactação → `dist/` |
+| Microsoft Edge | Compatível (testes E2E automatizados rodam no Edge) | `edge://extensions` → Modo de desenvolvedor (menu lateral) → Carregar descompactada → `dist/` |
+| Opera / Brave | Compatível (Chromium), não testado manualmente | Página de extensões do navegador → modo desenvolvedor → carregar `dist/` |
+| Firefox | Não suportado ainda (exige ajustes de manifest e testes) | — |
+| Safari | Não suportado (exige empacotamento via Xcode no macOS) | — |
+
+Para publicar nas lojas: `npm run package` gera `release/applypilot-<versão>.zip`, aceito pela Chrome Web Store, pelo Microsoft Edge Add-ons e pelo Opera Add-ons.
+
 ## Como usar
 
 1. **Perfil**: clique no ícone → *Importar currículo e certificados* → **Escolher pasta** (a pasta onde você guarda currículo e certificados). Escolha o currículo, revise os certificados e adicione. Itens importados aparecem com borda amarela no perfil até você clicar em **Confirmar**.
